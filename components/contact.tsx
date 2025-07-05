@@ -137,7 +137,7 @@ export function Contact() {
                       <h3 className="font-semibold text-lg mb-1">
                         {language === "ar" ? "البريد الإلكتروني" : "Email"}
                       </h3>
-                      <p className="text-muted-foreground">Sayahislem1313@gmail.com</p>
+                      <p className="text-muted-foreground">Worketplace1313@gmail.com</p>
                     </div>
                   </CardContent>
                 </Card>

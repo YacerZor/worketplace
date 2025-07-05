@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 
 type Language = "ar" | "en"
 
@@ -12,7 +12,28 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>("ar")
+  const [language, setLanguageState] = useState<Language>("ar")
+  const [isLoaded, setIsLoaded] = useState(false)
+
+  // Load language from localStorage on mount
+  useEffect(() => {
+    const savedLanguage = localStorage.getItem("language") as Language
+    if (savedLanguage && (savedLanguage === "ar" || savedLanguage === "en")) {
+      setLanguageState(savedLanguage)
+    }
+    setIsLoaded(true)
+  }, [])
+
+  // Save language to localStorage when it changes
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang)
+    localStorage.setItem("language", lang)
+  }
+
+  // Don't render children until language is loaded to prevent flash
+  if (!isLoaded) {
+    return null
+  }
 
   return <LanguageContext.Provider value={{ language, setLanguage }}>{children}</LanguageContext.Provider>
 }

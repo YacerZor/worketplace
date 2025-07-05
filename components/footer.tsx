@@ -101,8 +101,8 @@ export function Footer() {
             <ul className="space-y-3">
               <li className="text-muted-foreground">
                 Email:{" "}
-                <a href="mailto:Sayahislem1313@gmail.com" className="hover:text-primary transition-colors">
-                  Sayahislem1313@gmail.com
+                <a href="mailto:Worketplace1313@gmail.com" className="hover:text-primary transition-colors">
+                  Worketplace1313@gmail.com
                 </a>
               </li>
               <li className="text-muted-foreground">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, memo } from "react"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/components/language-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +14,22 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { Loader2, Plus, Save, X, Edit, Trash2, Eye, ImageIcon, Upload, Star, ArrowLeft, Menu } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  Save,
+  X,
+  Edit,
+  Trash2,
+  Eye,
+  ImageIcon,
+  Upload,
+  Star,
+  ArrowLeft,
+  Menu,
+  Palette,
+  Ruler,
+} from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 
@@ -98,6 +113,314 @@ interface Message {
   created_at: string
 }
 
+interface DefaultColor {
+  id: number
+  name_ar: string
+  name_en: string
+  value: string
+  created_at: string
+}
+
+interface DefaultSize {
+  id: number
+  name_ar: string
+  name_en: string
+  value: string
+  created_at: string
+}
+
+// Memoized components for better performance
+const ProductCard = memo(
+  ({
+    product,
+    language,
+    categories,
+    productImages,
+    productVariants,
+    onEdit,
+    onDelete,
+    onManageImages,
+    getCategoryName,
+  }: {
+    product: Product
+    language: string
+    categories: Category[]
+    productImages: Record<number, ProductImage[]>
+    productVariants: Record<number, ProductVariant[]>
+    onEdit: (product: Product) => void
+    onDelete: (id: number) => void
+    onManageImages: (product: Product) => void
+    getCategoryName: (categoryId: number | null) => string
+  }) => {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Product Image */}
+            <div className="md:col-span-1">
+              <img
+                src={product.image || "/placeholder.svg"}
+                alt={product[`title_${language}`]}
+                className="w-full aspect-square object-cover rounded-lg"
+                loading="lazy"
+              />
+            </div>
+
+            {/* Product Info */}
+            <div className="md:col-span-2 space-y-2">
+              <h3 className="text-xl font-semibold">{product[`title_${language}`]}</h3>
+              <p className="text-gray-600 line-clamp-2">{product[`description_${language}`]}</p>
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-bold">DA {product.price.toLocaleString()}</span>
+                {product.old_price && (
+                  <span className="text-gray-500 line-through">DA {product.old_price.toLocaleString()}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {product.in_stock ? (
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                    {language === "ar" ? "متوفر" : "In Stock"}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                    {language === "ar" ? "غير متوفر" : "Out of Stock"}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-500">
+                {language === "ar" ? "القسم:" : "Category:"} {getCategoryName(product.category_id)}
+              </p>
+
+              {/* Product Images */}
+              {productImages[product.id] && productImages[product.id].length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-medium mb-2">{language === "ar" ? "صور المنتج:" : "Product Images:"}</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {productImages[product.id].slice(0, 4).map((image) => (
+                      <div
+                        key={image.id}
+                        className={`relative w-16 h-16 rounded-md overflow-hidden border-2 ${
+                          image.is_main ? "border-primary" : "border-border"
+                        }`}
+                      >
+                        <img
+                          src={image.image_url || "/placeholder.svg"}
+                          alt={product[`title_${language}`]}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        {image.is_main && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-primary/70 text-white text-[8px] text-center">
+                            {language === "ar" ? "رئيسية" : "Main"}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {productImages[product.id].length > 4 && (
+                      <div className="w-16 h-16 rounded-md border-2 border-dashed border-gray-300 flex items-center justify-center text-xs text-gray-500">
+                        +{productImages[product.id].length - 4}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Product Variants */}
+              {productVariants[product.id] && productVariants[product.id].length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-medium mb-2">{language === "ar" ? "الخيارات المتاحة:" : "Available Options:"}</h4>
+
+                  {/* Colors */}
+                  {productVariants[product.id].filter((v) => v.variant_type === "color").length > 0 && (
+                    <div className="mb-2">
+                      <span className="text-sm font-medium">{language === "ar" ? "الألوان:" : "Colors:"}</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {productVariants[product.id]
+                          .filter((v) => v.variant_type === "color")
+                          .slice(0, 5)
+                          .map((color) => (
+                            <div key={color.id} className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: color.value }}></div>
+                              <span className="text-xs">{color[`name_${language}`]}</span>
+                            </div>
+                          ))}
+                        {productVariants[product.id].filter((v) => v.variant_type === "color").length > 5 && (
+                          <span className="text-xs text-gray-500">
+                            +{productVariants[product.id].filter((v) => v.variant_type === "color").length - 5}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sizes */}
+                  {productVariants[product.id].filter((v) => v.variant_type === "size").length > 0 && (
+                    <div>
+                      <span className="text-sm font-medium">{language === "ar" ? "المقاسات:" : "Sizes:"}</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {productVariants[product.id]
+                          .filter((v) => v.variant_type === "size")
+                          .slice(0, 5)
+                          .map((size) => (
+                            <span key={size.id} className="text-xs bg-muted px-2 py-1 rounded">
+                              {size[`name_${language}`]}
+                            </span>
+                          ))}
+                        {productVariants[product.id].filter((v) => v.variant_type === "size").length > 5 && (
+                          <span className="text-xs text-gray-500">
+                            +{productVariants[product.id].filter((v) => v.variant_type === "size").length - 5}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Product Actions */}
+            <div className="md:col-span-3 flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => onManageImages(product)}>
+                <ImageIcon className="w-4 h-4 mr-2" />
+                {language === "ar" ? "إدارة الصور" : "Manage Images"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => onEdit(product)}>
+                <Edit className="w-4 h-4 mr-2" />
+                {language === "ar" ? "تعديل" : "Edit"}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => onDelete(product.id)}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                {language === "ar" ? "حذف" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  },
+)
+
+ProductCard.displayName = "ProductCard"
+
+const OrderCard = memo(
+  ({
+    order,
+    language,
+    orderItems,
+    onUpdateStatus,
+    onViewDetails,
+    getOrderStatusBadge,
+    getColorName,
+  }: {
+    order: Order
+    language: string
+    orderItems: Record<number, OrderItem[]>
+    onUpdateStatus: (orderId: number, status: string) => void
+    onViewDetails: (order: Order) => void
+    getOrderStatusBadge: (status: string) => JSX.Element
+    getColorName: (colorValue: string | null) => string | null
+  }) => {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Order Info */}
+            <div className="md:col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">
+                  {language === "ar" ? "الطلب رقم:" : "Order #:"} {order.order_number || `#${order.id}`}
+                </h3>
+                {getOrderStatusBadge(order.status)}
+              </div>
+              <p className="text-gray-600">
+                {language === "ar" ? "الاسم:" : "Name:"} {order.full_name}
+              </p>
+              <p className="text-gray-600">
+                {language === "ar" ? "الهاتف:" : "Phone:"} {order.phone}
+              </p>
+              <p className="text-gray-600">
+                {language === "ar" ? "العنوان:" : "Address:"} {order.state}, {order.city}
+              </p>
+              <p className="text-gray-600">
+                {language === "ar" ? "المبلغ الإجمالي:" : "Total Amount:"} DA {order.total_amount.toLocaleString()}
+              </p>
+              <p className="text-sm text-gray-500">
+                {language === "ar" ? "تاريخ الطلب:" : "Order Date:"} {new Date(order.created_at).toLocaleDateString()}
+              </p>
+            </div>
+
+            {/* Order Actions */}
+            <div className="md:col-span-1 space-y-2">
+              <Select value={order.status} onValueChange={(value) => onUpdateStatus(order.id, value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={language === "ar" ? "تغيير الحالة" : "Change Status"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">{language === "ar" ? "قيد الانتظار" : "Pending"}</SelectItem>
+                  <SelectItem value="processing">{language === "ar" ? "قيد المعالجة" : "Processing"}</SelectItem>
+                  <SelectItem value="shipped">{language === "ar" ? "تم الشحن" : "Shipped"}</SelectItem>
+                  <SelectItem value="delivered">{language === "ar" ? "تم التوصيل" : "Delivered"}</SelectItem>
+                  <SelectItem value="cancelled">{language === "ar" ? "ملغي" : "Cancelled"}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={() => onViewDetails(order)} className="w-full">
+                <Eye className="w-4 h-4 mr-2" />
+                {language === "ar" ? "عرض التفاصيل" : "View Details"}
+              </Button>
+            </div>
+
+            {/* Order Items */}
+            {orderItems[order.id] && orderItems[order.id].length > 0 && (
+              <div className="md:col-span-3 mt-4 pt-4 border-t">
+                <h4 className="text-lg font-semibold mb-2">
+                  {language === "ar" ? "المنتجات المطلوبة" : "Order Items"}
+                </h4>
+                <div className="space-y-2">
+                  {orderItems[order.id].slice(0, 3).map((item) => (
+                    <div key={item.id} className="flex justify-between items-center p-2 bg-muted rounded">
+                      <div>
+                        <p className="font-medium">{item.product_title}</p>
+                        <div className="text-sm text-muted-foreground">
+                          {item.color && (
+                            <span>
+                              {language === "ar" ? "اللون:" : "Color:"} {getColorName(item.color) || item.color}
+                            </span>
+                          )}
+                          {item.color && item.size && " • "}
+                          {item.size && (
+                            <span>
+                              {language === "ar" ? "المقاس:" : "Size:"} {item.size}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">
+                          {item.quantity} × DA {item.product_price.toLocaleString()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          DA {(item.quantity * item.product_price).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {orderItems[order.id].length > 3 && (
+                    <p className="text-sm text-gray-500 text-center">
+                      +{orderItems[order.id].length - 3} {language === "ar" ? "منتجات أخرى" : "more items"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  },
+)
+
+OrderCard.displayName = "OrderCard"
+
 export default function AdminDashboard() {
   const { language } = useLanguage()
   const router = useRouter()
@@ -110,6 +433,8 @@ export default function AdminDashboard() {
   const [orderItems, setOrderItems] = useState<Record<number, OrderItem[]>>({})
   const [productVariants, setProductVariants] = useState<Record<number, ProductVariant[]>>({})
   const [productImages, setProductImages] = useState<Record<number, ProductImage[]>>({})
+  const [defaultColors, setDefaultColors] = useState<DefaultColor[]>([])
+  const [defaultSizes, setDefaultSizes] = useState<DefaultSize[]>([])
 
   // Loading states
   const [isLoading, setIsLoading] = useState(true)
@@ -150,9 +475,7 @@ export default function AdminDashboard() {
 
   // Image states
   const [previewImages, setPreviewImages] = useState<string[]>([])
-  const [editPreviewImages, setEditPreviewImages] = useState<string[]>([])
   const [mainImageIndex, setMainImageIndex] = useState(0)
-  const [editMainImageIndex, setEditMainImageIndex] = useState(0)
 
   // Variant states
   const [newVariants, setNewVariants] = useState<{
@@ -181,9 +504,28 @@ export default function AdminDashboard() {
   const [editColor, setEditColor] = useState({ name_ar: "", name_en: "", value: "#000000" })
   const [editSize, setEditSize] = useState({ name_ar: "", name_en: "", value: "" })
 
+  // Default variants states
+  const [newDefaultColor, setNewDefaultColor] = useState({ name_ar: "", name_en: "", value: "#000000" })
+  const [newDefaultSize, setNewDefaultSize] = useState({ name_ar: "", name_en: "", value: "" })
+
   // Search and filter states
   const [orderSearch, setOrderSearch] = useState("")
   const [orderStatusFilter, setOrderStatusFilter] = useState("all")
+
+  // Memoized filtered orders for better performance
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const matchesSearch =
+        order.full_name.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        order.phone.includes(orderSearch) ||
+        order.order_number?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+        order.id.toString().includes(orderSearch)
+
+      const matchesStatus = orderStatusFilter === "all" || order.status === orderStatusFilter
+
+      return matchesSearch && matchesStatus
+    })
+  }, [orders, orderSearch, orderStatusFilter])
 
   // Initialize data
   useEffect(() => {
@@ -196,12 +538,42 @@ export default function AdminDashboard() {
         return
       }
 
-      await Promise.all([fetchProducts(), fetchCategories(), fetchOrders(), fetchMessages()])
+      await Promise.all([
+        fetchProducts(),
+        fetchCategories(),
+        fetchOrders(),
+        fetchMessages(),
+        fetchDefaultColors(),
+        fetchDefaultSizes(),
+      ])
       setIsLoading(false)
     }
 
     checkAuth()
   }, [router])
+
+  // Fetch default colors and sizes
+  const fetchDefaultColors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from("default_colors").select("*").order("name_ar", { ascending: true })
+
+      if (error) throw error
+      setDefaultColors(data || [])
+    } catch (error) {
+      console.error("Error fetching default colors:", error)
+    }
+  }, [])
+
+  const fetchDefaultSizes = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from("default_sizes").select("*").order("value", { ascending: true })
+
+      if (error) throw error
+      setDefaultSizes(data || [])
+    } catch (error) {
+      console.error("Error fetching default sizes:", error)
+    }
+  }, [])
 
   // Optimized fetch functions
   const fetchProducts = useCallback(async () => {
@@ -267,18 +639,7 @@ export default function AdminDashboard() {
     }
   }, [language])
 
-  const fetchProductVariants = async (productId: number) => {
-    try {
-      const { data, error } = await supabase.from("product_variants").select("*").eq("product_id", productId)
-
-      if (error) throw error
-      setProductVariants((prev) => ({ ...prev, [productId]: data || [] }))
-    } catch (error) {
-      console.error("Error fetching product variants:", error)
-    }
-  }
-
-  const fetchProductImages = async (productId: number) => {
+  const fetchProductImages = useCallback(async (productId: number) => {
     try {
       const { data, error } = await supabase
         .from("product_images")
@@ -291,9 +652,9 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error("Error fetching product images:", error)
     }
-  }
+  }, [])
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const { data, error } = await supabase.from("categories").select("*").order("created_at", { ascending: false })
 
@@ -307,9 +668,9 @@ export default function AdminDashboard() {
         variant: "destructive",
       })
     }
-  }
+  }, [language])
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false })
 
@@ -341,20 +702,9 @@ export default function AdminDashboard() {
         variant: "destructive",
       })
     }
-  }
+  }, [language])
 
-  const fetchOrderItems = async (orderId: number) => {
-    try {
-      const { data, error } = await supabase.from("order_items").select("*").eq("order_id", orderId)
-
-      if (error) throw error
-      setOrderItems((prev) => ({ ...prev, [orderId]: data || [] }))
-    } catch (error) {
-      console.error("Error fetching order items:", error)
-    }
-  }
-
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const { data, error } = await supabase.from("messages").select("*").order("created_at", { ascending: false })
 
@@ -368,7 +718,7 @@ export default function AdminDashboard() {
         variant: "destructive",
       })
     }
-  }
+  }, [language])
 
   // Optimized image handling functions
   const convertFileToBase64 = useCallback((file: File): Promise<string> => {
@@ -408,77 +758,282 @@ export default function AdminDashboard() {
     })
   }, [])
 
-  const handleImageUpload = async (files: FileList | null, isEdit = false) => {
-    if (!files || files.length === 0) return
+  const handleImageUpload = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return
 
-    setUploadingImage(true)
-    const newImages: string[] = []
+      setUploadingImage(true)
+      const newImages: string[] = []
 
-    try {
-      // Process images in parallel for faster upload
-      const imagePromises = Array.from(files)
-        .slice(0, 5)
-        .map(async (file) => {
-          if (file.type.startsWith("image/")) {
-            return await convertFileToBase64(file)
-          }
-          return null
-        })
+      try {
+        // Process images in parallel for faster upload
+        const imagePromises = Array.from(files)
+          .slice(0, 5)
+          .map(async (file) => {
+            if (file.type.startsWith("image/")) {
+              return await convertFileToBase64(file)
+            }
+            return null
+          })
 
-      const results = await Promise.all(imagePromises)
-      const validImages = results.filter((img) => img !== null) as string[]
-      newImages.push(...validImages)
+        const results = await Promise.all(imagePromises)
+        const validImages = results.filter((img) => img !== null) as string[]
+        newImages.push(...validImages)
 
-      if (isEdit) {
-        setEditPreviewImages((prev) => [...prev, ...newImages])
-      } else {
         setPreviewImages((prev) => [...prev, ...newImages])
-      }
 
+        toast({
+          title: language === "ar" ? "تم رفع الصور" : "Images uploaded",
+          description: language === "ar" ? "تم رفع الصور بنجاح" : "Images uploaded successfully",
+        })
+      } catch (error) {
+        console.error("Error uploading images:", error)
+        toast({
+          title: language === "ar" ? "خطأ في رفع الصور" : "Error uploading images",
+          description: language === "ar" ? "حدث خطأ أثناء رفع الصور" : "An error occurred while uploading images",
+          variant: "destructive",
+        })
+      } finally {
+        setUploadingImage(false)
+      }
+    },
+    [convertFileToBase64, language],
+  )
+
+  const removePreviewImage = useCallback((index: number) => {
+    setPreviewImages((prev) => prev.filter((_, i) => i !== index))
+    setMainImageIndex((prev) => {
+      if (prev === index) {
+        return 0
+      } else if (prev > index) {
+        return prev - 1
+      }
+      return prev
+    })
+  }, [])
+
+  const setMainImage = useCallback((index: number) => {
+    setMainImageIndex(index)
+  }, [])
+
+  // Default colors functions
+  const handleAddDefaultColor = useCallback(async () => {
+    if (!newDefaultColor.name_ar || !newDefaultColor.value) {
       toast({
-        title: language === "ar" ? "تم رفع الصور" : "Images uploaded",
-        description: language === "ar" ? "تم رفع الصور بنجاح" : "Images uploaded successfully",
-      })
-    } catch (error) {
-      console.error("Error uploading images:", error)
-      toast({
-        title: language === "ar" ? "خطأ في رفع الصور" : "Error uploading images",
-        description: language === "ar" ? "حدث خطأ أثناء رفع الصور" : "An error occurred while uploading images",
+        title: language === "ar" ? "خطأ" : "Error",
+        description: language === "ar" ? "يرجى ملء جميع الحقول المطلوبة" : "Please fill all required fields",
         variant: "destructive",
       })
-    } finally {
-      setUploadingImage(false)
+      return
     }
-  }
 
-  const removePreviewImage = (index: number, isEdit = false) => {
-    if (isEdit) {
-      setEditPreviewImages((prev) => prev.filter((_, i) => i !== index))
-      if (editMainImageIndex === index) {
-        setEditMainImageIndex(0)
-      } else if (editMainImageIndex > index) {
-        setEditMainImageIndex(editMainImageIndex - 1)
+    try {
+      const colorToAdd = {
+        ...newDefaultColor,
+        name_en: newDefaultColor.name_en || newDefaultColor.name_ar,
       }
-    } else {
-      setPreviewImages((prev) => prev.filter((_, i) => i !== index))
-      if (mainImageIndex === index) {
-        setMainImageIndex(0)
-      } else if (mainImageIndex > index) {
-        setMainImageIndex(mainImageIndex - 1)
-      }
-    }
-  }
 
-  const setMainImage = (index: number, isEdit = false) => {
-    if (isEdit) {
-      setEditMainImageIndex(index)
-    } else {
-      setMainImageIndex(index)
+      const { data, error } = await supabase.from("default_colors").insert([colorToAdd]).select().single()
+
+      if (error) throw error
+
+      setDefaultColors((prev) => [...prev, data])
+      setNewDefaultColor({ name_ar: "", name_en: "", value: "#000000" })
+
+      toast({
+        title: language === "ar" ? "تم إضافة اللون" : "Color added",
+        description: language === "ar" ? "تم إضافة اللون بنجاح" : "Color has been added successfully",
+      })
+    } catch (error) {
+      console.error("Error adding default color:", error)
+      toast({
+        title: language === "ar" ? "خطأ في إضافة اللون" : "Error adding color",
+        description: error.message,
+        variant: "destructive",
+      })
     }
-  }
+  }, [newDefaultColor, language])
+
+  const handleAddDefaultSize = useCallback(async () => {
+    if (!newDefaultSize.name_ar || !newDefaultSize.value) {
+      toast({
+        title: language === "ar" ? "خطأ" : "Error",
+        description: language === "ar" ? "يرجى ملء جميع الحقول المطلوبة" : "Please fill all required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const sizeToAdd = {
+        ...newDefaultSize,
+        name_en: newDefaultSize.name_en || newDefaultSize.name_ar,
+      }
+
+      const { data, error } = await supabase.from("default_sizes").insert([sizeToAdd]).select().single()
+
+      if (error) throw error
+
+      setDefaultSizes((prev) => [...prev, data])
+      setNewDefaultSize({ name_ar: "", name_en: "", value: "" })
+
+      toast({
+        title: language === "ar" ? "تم إضافة المقاس" : "Size added",
+        description: language === "ar" ? "تم إضافة المقاس بنجاح" : "Size has been added successfully",
+      })
+    } catch (error) {
+      console.error("Error adding default size:", error)
+      toast({
+        title: language === "ar" ? "خطأ في إضافة المقاس" : "Error adding size",
+        description: error.message,
+        variant: "destructive",
+      })
+    }
+  }, [newDefaultSize, language])
+
+  const handleDeleteDefaultColor = useCallback(
+    async (id: number) => {
+      if (
+        window.confirm(
+          language === "ar" ? "هل أنت متأكد من حذف هذا اللون؟" : "Are you sure you want to delete this color?",
+        )
+      ) {
+        try {
+          const { error } = await supabase.from("default_colors").delete().eq("id", id)
+          if (error) throw error
+
+          setDefaultColors((prev) => prev.filter((c) => c.id !== id))
+
+          toast({
+            title: language === "ar" ? "تم حذف اللون" : "Color deleted",
+            description: language === "ar" ? "تم حذف اللون بنجاح" : "Color has been deleted successfully",
+          })
+        } catch (error) {
+          console.error("Error deleting default color:", error)
+          toast({
+            title: language === "ar" ? "خطأ في حذف اللون" : "Error deleting color",
+            description: error.message,
+            variant: "destructive",
+          })
+        }
+      }
+    },
+    [language],
+  )
+
+  const handleDeleteDefaultSize = useCallback(
+    async (id: number) => {
+      if (
+        window.confirm(
+          language === "ar" ? "هل أنت متأكد من حذف هذا المقاس؟" : "Are you sure you want to delete this size?",
+        )
+      ) {
+        try {
+          const { error } = await supabase.from("default_sizes").delete().eq("id", id)
+          if (error) throw error
+
+          setDefaultSizes((prev) => prev.filter((s) => s.id !== id))
+
+          toast({
+            title: language === "ar" ? "تم حذف المقاس" : "Size deleted",
+            description: language === "ar" ? "تم حذف المقاس بنجاح" : "Size has been deleted successfully",
+          })
+        } catch (error) {
+          console.error("Error deleting default size:", error)
+          toast({
+            title: language === "ar" ? "خطأ في حذف المقاس" : "Error deleting size",
+            description: error.message,
+            variant: "destructive",
+          })
+        }
+      }
+    },
+    [language],
+  )
+
+  // Add color/size from defaults
+  const addColorFromDefaults = useCallback((color: DefaultColor) => {
+    const colorToAdd = {
+      name_ar: color.name_ar,
+      name_en: color.name_en,
+      value: color.value,
+    }
+
+    // Check if color already exists
+    setNewVariants((prev) => {
+      const exists = prev.colors.some((c) => c.value === color.value)
+      if (!exists) {
+        return {
+          ...prev,
+          colors: [...prev.colors, colorToAdd],
+        }
+      }
+      return prev
+    })
+  }, [])
+
+  const addSizeFromDefaults = useCallback((size: DefaultSize) => {
+    const sizeToAdd = {
+      name_ar: size.name_ar,
+      name_en: size.name_en,
+      value: size.value,
+    }
+
+    // Check if size already exists
+    setNewVariants((prev) => {
+      const exists = prev.sizes.some((s) => s.value === size.value)
+      if (!exists) {
+        return {
+          ...prev,
+          sizes: [...prev.sizes, sizeToAdd],
+        }
+      }
+      return prev
+    })
+  }, [])
+
+  const addEditColorFromDefaults = useCallback((color: DefaultColor) => {
+    const colorToAdd = {
+      name_ar: color.name_ar,
+      name_en: color.name_en,
+      value: color.value,
+    }
+
+    // Check if color already exists
+    setEditingVariants((prev) => {
+      const exists = prev.colors.some((c) => c.value === color.value)
+      if (!exists) {
+        return {
+          ...prev,
+          colors: [...prev.colors, colorToAdd],
+        }
+      }
+      return prev
+    })
+  }, [])
+
+  const addEditSizeFromDefaults = useCallback((size: DefaultSize) => {
+    const sizeToAdd = {
+      name_ar: size.name_ar,
+      name_en: size.name_en,
+      value: size.value,
+    }
+
+    // Check if size already exists
+    setEditingVariants((prev) => {
+      const exists = prev.sizes.some((s) => s.value === size.value)
+      if (!exists) {
+        return {
+          ...prev,
+          sizes: [...prev.sizes, sizeToAdd],
+        }
+      }
+      return prev
+    })
+  }, [])
 
   // Optimized product functions
-  const handleAddProduct = async () => {
+  const handleAddProduct = useCallback(async () => {
     if (previewImages.length === 0) {
       toast({
         title: language === "ar" ? "خطأ" : "Error",
@@ -625,65 +1180,40 @@ export default function AdminDashboard() {
     } finally {
       setIsAddingProduct(false)
     }
-  }
+  }, [previewImages, mainImageIndex, newProduct, newVariants, language])
 
-  const handleEditProduct = (product: Product) => {
-    setEditingProduct(product)
+  const handleEditProduct = useCallback(
+    (product: Product) => {
+      setEditingProduct(product)
 
-    // Load existing variants
-    const currentVariants = productVariants[product.id] || []
-    const colors = currentVariants
-      .filter((v) => v.variant_type === "color")
-      .map((v) => ({ name_ar: v.name_ar, name_en: v.name_en, value: v.value }))
-    const sizes = currentVariants
-      .filter((v) => v.variant_type === "size")
-      .map((v) => ({ name_ar: v.name_ar, name_en: v.name_en, value: v.value }))
+      // Load existing variants
+      const currentVariants = productVariants[product.id] || []
+      const colors = currentVariants
+        .filter((v) => v.variant_type === "color")
+        .map((v) => ({ name_ar: v.name_ar, name_en: v.name_en, value: v.value }))
+      const sizes = currentVariants
+        .filter((v) => v.variant_type === "size")
+        .map((v) => ({ name_ar: v.name_ar, name_en: v.name_en, value: v.value }))
 
-    setEditingVariants({ colors, sizes })
+      setEditingVariants({ colors, sizes })
+    },
+    [productVariants],
+  )
 
-    // Load existing images
-    const existingImages = productImages[product.id] || []
-    setEditPreviewImages(existingImages.map((img) => img.image_url))
-
-    const mainImageIdx = existingImages.findIndex((img) => img.is_main)
-    setEditMainImageIndex(mainImageIdx >= 0 ? mainImageIdx : 0)
-  }
-
-  const handleSaveProductEdit = async () => {
+  const handleSaveProductEdit = useCallback(async () => {
     if (!editingProduct) return
-
-    if (editPreviewImages.length === 0) {
-      toast({
-        title: language === "ar" ? "خطأ" : "Error",
-        description:
-          language === "ar" ? "يجب أن يحتوي المنتج على صورة واحدة على الأقل" : "Product must have at least one image",
-        variant: "destructive",
-      })
-      return
-    }
 
     setIsSavingProduct(true)
 
     try {
-      const mainImage = editPreviewImages[editMainImageIndex]
-
       const formattedProduct = {
         ...editingProduct,
         title_en: editingProduct.title_en || editingProduct.title_ar,
         description_en: editingProduct.description_en || editingProduct.description_ar,
-        image: mainImage,
         price: Number(editingProduct.price),
         old_price: editingProduct.old_price ? Number(editingProduct.old_price) : null,
         rating: Number(editingProduct.rating),
       }
-
-      // Prepare all operations
-      const imagesToInsert = editPreviewImages.map((url, index) => ({
-        product_id: editingProduct.id,
-        image_url: url,
-        is_main: index === editMainImageIndex,
-        sort_order: index,
-      }))
 
       const variantsToInsert = [
         ...editingVariants.colors.map((color) => ({
@@ -707,35 +1237,18 @@ export default function AdminDashboard() {
       // Execute all operations in parallel
       const operations = [
         supabase.from("products").update(formattedProduct).eq("id", editingProduct.id),
-        supabase.from("product_images").delete().eq("product_id", editingProduct.id),
         supabase.from("product_variants").delete().eq("product_id", editingProduct.id),
       ]
 
       await Promise.all(operations)
 
-      // Insert new data in parallel
-      const insertOperations = []
-      if (imagesToInsert.length > 0) {
-        insertOperations.push(supabase.from("product_images").insert(imagesToInsert))
-      }
+      // Insert new variants
       if (variantsToInsert.length > 0) {
-        insertOperations.push(supabase.from("product_variants").insert(variantsToInsert))
+        await supabase.from("product_variants").insert(variantsToInsert)
       }
-
-      await Promise.all(insertOperations)
 
       // Optimistic update
       setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? formattedProduct : p)))
-      setProductImages((prev) => ({
-        ...prev,
-        [editingProduct.id]: imagesToInsert.map((img, index) => ({
-          id: Date.now() + index,
-          product_id: editingProduct.id,
-          image_url: img.image_url,
-          is_main: img.is_main,
-          sort_order: img.sort_order,
-        })),
-      }))
 
       if (variantsToInsert.length > 0) {
         setProductVariants((prev) => ({
@@ -759,8 +1272,6 @@ export default function AdminDashboard() {
 
       setEditingProduct(null)
       setEditingVariants({ colors: [], sizes: [] })
-      setEditPreviewImages([])
-      setEditMainImageIndex(0)
     } catch (error) {
       console.error("Error updating product:", error)
       toast({
@@ -771,53 +1282,56 @@ export default function AdminDashboard() {
     } finally {
       setIsSavingProduct(false)
     }
-  }
+  }, [editingProduct, editingVariants, language])
 
-  const handleDeleteProduct = async (id: number) => {
-    if (
-      window.confirm(
-        language === "ar" ? "هل أنت متأكد من حذف هذا المنتج؟" : "Are you sure you want to delete this product?",
-      )
-    ) {
-      try {
-        toast({
-          title: language === "ar" ? "جاري حذف المنتج..." : "Deleting product...",
-          description: language === "ar" ? "يرجى الانتظار" : "Please wait",
-        })
+  const handleDeleteProduct = useCallback(
+    async (id: number) => {
+      if (
+        window.confirm(
+          language === "ar" ? "هل أنت متأكد من حذف هذا المنتج؟" : "Are you sure you want to delete this product?",
+        )
+      ) {
+        try {
+          toast({
+            title: language === "ar" ? "جاري حذف المنتج..." : "Deleting product...",
+            description: language === "ar" ? "يرجى الانتظار" : "Please wait",
+          })
 
-        const { error } = await supabase.from("products").delete().eq("id", id)
-        if (error) throw error
+          const { error } = await supabase.from("products").delete().eq("id", id)
+          if (error) throw error
 
-        // Optimistic update
-        setProducts((prev) => prev.filter((p) => p.id !== id))
-        setProductImages((prev) => {
-          const newImages = { ...prev }
-          delete newImages[id]
-          return newImages
-        })
-        setProductVariants((prev) => {
-          const newVariants = { ...prev }
-          delete newVariants[id]
-          return newVariants
-        })
+          // Optimistic update
+          setProducts((prev) => prev.filter((p) => p.id !== id))
+          setProductImages((prev) => {
+            const newImages = { ...prev }
+            delete newImages[id]
+            return newImages
+          })
+          setProductVariants((prev) => {
+            const newVariants = { ...prev }
+            delete newVariants[id]
+            return newVariants
+          })
 
-        toast({
-          title: language === "ar" ? "تم حذف المنتج" : "Product deleted",
-          description: language === "ar" ? "تم حذف المنتج بنجاح" : "Product has been deleted successfully",
-        })
-      } catch (error) {
-        console.error("Error deleting product:", error)
-        toast({
-          title: language === "ar" ? "خطأ في حذف المنتج" : "Error deleting product",
-          description: error.message,
-          variant: "destructive",
-        })
+          toast({
+            title: language === "ar" ? "تم حذف المنتج" : "Product deleted",
+            description: language === "ar" ? "تم حذف المنتج بنجاح" : "Product has been deleted successfully",
+          })
+        } catch (error) {
+          console.error("Error deleting product:", error)
+          toast({
+            title: language === "ar" ? "خطأ في حذف المنتج" : "Error deleting product",
+            description: error.message,
+            variant: "destructive",
+          })
+        }
       }
-    }
-  }
+    },
+    [language],
+  )
 
   // Category functions
-  const handleAddCategory = async () => {
+  const handleAddCategory = useCallback(async () => {
     setIsAddingCategory(true)
 
     try {
@@ -851,13 +1365,13 @@ export default function AdminDashboard() {
     } finally {
       setIsAddingCategory(false)
     }
-  }
+  }, [newCategory, language])
 
-  const handleEditCategory = (category: Category) => {
+  const handleEditCategory = useCallback((category: Category) => {
     setEditingCategory(category)
-  }
+  }, [])
 
-  const handleSaveCategoryEdit = async () => {
+  const handleSaveCategoryEdit = useCallback(async () => {
     if (!editingCategory) return
 
     setIsSavingCategory(true)
@@ -892,43 +1406,46 @@ export default function AdminDashboard() {
     } finally {
       setIsSavingCategory(false)
     }
-  }
+  }, [editingCategory, language])
 
-  const handleDeleteCategory = async (id: number) => {
-    if (
-      window.confirm(
-        language === "ar" ? "هل أنت متأكد من حذف هذا القسم؟" : "Are you sure you want to delete this category?",
-      )
-    ) {
-      try {
-        toast({
-          title: language === "ar" ? "جاري حذف القسم..." : "Deleting category...",
-          description: language === "ar" ? "يرجى الانتظار" : "Please wait",
-        })
+  const handleDeleteCategory = useCallback(
+    async (id: number) => {
+      if (
+        window.confirm(
+          language === "ar" ? "هل أنت متأكد من حذف هذا القسم؟" : "Are you sure you want to delete this category?",
+        )
+      ) {
+        try {
+          toast({
+            title: language === "ar" ? "جاري حذف القسم..." : "Deleting category...",
+            description: language === "ar" ? "يرجى الانتظار" : "Please wait",
+          })
 
-        const { error } = await supabase.from("categories").delete().eq("id", id)
-        if (error) throw error
+          const { error } = await supabase.from("categories").delete().eq("id", id)
+          if (error) throw error
 
-        // Optimistic update
-        setCategories((prev) => prev.filter((c) => c.id !== id))
+          // Optimistic update
+          setCategories((prev) => prev.filter((c) => c.id !== id))
 
-        toast({
-          title: language === "ar" ? "تم حذف القسم" : "Category deleted",
-          description: language === "ar" ? "تم حذف القسم بنجاح" : "Category has been deleted successfully",
-        })
-      } catch (error) {
-        console.error("Error deleting category:", error)
-        toast({
-          title: language === "ar" ? "خطأ في حذف القسم" : "Error deleting category",
-          description: error.message,
-          variant: "destructive",
-        })
+          toast({
+            title: language === "ar" ? "تم حذف القسم" : "Category deleted",
+            description: language === "ar" ? "تم حذف القسم بنجاح" : "Category has been deleted successfully",
+          })
+        } catch (error) {
+          console.error("Error deleting category:", error)
+          toast({
+            title: language === "ar" ? "خطأ في حذف القسم" : "Error deleting category",
+            description: error.message,
+            variant: "destructive",
+          })
+        }
       }
-    }
-  }
+    },
+    [language],
+  )
 
   // Variant functions
-  const handleAddColor = () => {
+  const handleAddColor = useCallback(() => {
     if (newColor.name_ar && newColor.value) {
       const colorToAdd = {
         ...newColor,
@@ -941,9 +1458,9 @@ export default function AdminDashboard() {
       setNewColor({ name_ar: "", name_en: "", value: "#000000" })
       setIsAddingColor(false)
     }
-  }
+  }, [newColor])
 
-  const handleAddSize = () => {
+  const handleAddSize = useCallback(() => {
     if (newSize.name_ar && newSize.value) {
       const sizeToAdd = {
         ...newSize,
@@ -956,23 +1473,23 @@ export default function AdminDashboard() {
       setNewSize({ name_ar: "", name_en: "", value: "" })
       setIsAddingSize(false)
     }
-  }
+  }, [newSize])
 
-  const handleRemoveColor = (index: number) => {
+  const handleRemoveColor = useCallback((index: number) => {
     setNewVariants((prev) => ({
       ...prev,
       colors: prev.colors.filter((_, i) => i !== index),
     }))
-  }
+  }, [])
 
-  const handleRemoveSize = (index: number) => {
+  const handleRemoveSize = useCallback((index: number) => {
     setNewVariants((prev) => ({
       ...prev,
       sizes: prev.sizes.filter((_, i) => i !== index),
     }))
-  }
+  }, [])
 
-  const handleAddEditColor = () => {
+  const handleAddEditColor = useCallback(() => {
     if (editColor.name_ar && editColor.value) {
       const colorToAdd = {
         ...editColor,
@@ -985,9 +1502,9 @@ export default function AdminDashboard() {
       setEditColor({ name_ar: "", name_en: "", value: "#000000" })
       setIsEditingColor(false)
     }
-  }
+  }, [editColor])
 
-  const handleAddEditSize = () => {
+  const handleAddEditSize = useCallback(() => {
     if (editSize.name_ar && editSize.value) {
       const sizeToAdd = {
         ...editSize,
@@ -995,244 +1512,255 @@ export default function AdminDashboard() {
       }
       setEditingVariants((prev) => ({
         ...prev,
-        sizes: [...prev.sizes, sizeToAdd],
+        sizes: [...prev.sizes, colorToAdd],
       }))
       setEditSize({ name_ar: "", name_en: "", value: "" })
       setIsEditingSize(false)
     }
-  }
+  }, [editSize])
 
-  const handleRemoveEditColor = (index: number) => {
+  const handleRemoveEditColor = useCallback((index: number) => {
     setEditingVariants((prev) => ({
       ...prev,
       colors: prev.colors.filter((_, i) => i !== index),
     }))
-  }
+  }, [])
 
-  const handleRemoveEditSize = (index: number) => {
+  const handleRemoveEditSize = useCallback((index: number) => {
     setEditingVariants((prev) => ({
       ...prev,
       sizes: prev.sizes.filter((_, i) => i !== index),
     }))
-  }
+  }, [])
 
   // Order functions
-  const handleUpdateOrderStatus = async (orderId: number, status: string) => {
-    try {
-      toast({
-        title: language === "ar" ? "جاري تحديث حالة الطلب..." : "Updating order status...",
-        description: language === "ar" ? "يرجى الانتظار" : "Please wait",
-      })
-
-      const { error } = await supabase.from("orders").update({ status }).eq("id", orderId)
-      if (error) throw error
-
-      // Optimistic update
-      setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)))
-
-      toast({
-        title: language === "ar" ? "تم تحديث حالة الطلب" : "Order status updated",
-        description: language === "ar" ? "تم تحديث حالة الطلب بنجاح" : "Order status has been updated successfully",
-      })
-    } catch (error) {
-      console.error("Error updating order status:", error)
-      toast({
-        title: language === "ar" ? "خطأ في تحديث حالة الطلب" : "Error updating order status",
-        description: error.message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Message functions
-  const handleDeleteMessage = async (id: number) => {
-    if (
-      window.confirm(
-        language === "ar" ? "هل أنت متأكد من حذف هذه الرسالة؟" : "Are you sure you want to delete this message?",
-      )
-    ) {
+  const handleUpdateOrderStatus = useCallback(
+    async (orderId: number, status: string) => {
       try {
         toast({
-          title: language === "ar" ? "جاري حذف الرسالة..." : "Deleting message...",
+          title: language === "ar" ? "جاري تحديث حالة الطلب..." : "Updating order status...",
           description: language === "ar" ? "يرجى الانتظار" : "Please wait",
         })
 
-        const { error } = await supabase.from("messages").delete().eq("id", id)
+        const { error } = await supabase.from("orders").update({ status }).eq("id", orderId)
         if (error) throw error
 
         // Optimistic update
-        setMessages((prev) => prev.filter((m) => m.id !== id))
+        setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)))
 
         toast({
-          title: language === "ar" ? "تم حذف الرسالة" : "Message deleted",
-          description: language === "ar" ? "تم حذف الرسالة بنجاح" : "Message has been deleted successfully",
+          title: language === "ar" ? "تم تحديث حالة الطلب" : "Order status updated",
+          description: language === "ar" ? "تم تحديث حالة الطلب بنجاح" : "Order status has been updated successfully",
         })
       } catch (error) {
-        console.error("Error deleting message:", error)
+        console.error("Error updating order status:", error)
         toast({
-          title: language === "ar" ? "خطأ في حذف الرسالة" : "Error deleting message",
+          title: language === "ar" ? "خطأ في تحديث حالة الطلب" : "Error updating order status",
           description: error.message,
           variant: "destructive",
         })
       }
-    }
-  }
+    },
+    [language],
+  )
+
+  // Message functions
+  const handleDeleteMessage = useCallback(
+    async (id: number) => {
+      if (
+        window.confirm(
+          language === "ar" ? "هل أنت متأكد من حذف هذه الرسالة؟" : "Are you sure you want to delete this message?",
+        )
+      ) {
+        try {
+          toast({
+            title: language === "ar" ? "جاري حذف الرسالة..." : "Deleting message...",
+            description: language === "ar" ? "يرجى الانتظار" : "Please wait",
+          })
+
+          const { error } = await supabase.from("messages").delete().eq("id", id)
+          if (error) throw error
+
+          // Optimistic update
+          setMessages((prev) => prev.filter((m) => m.id !== id))
+
+          toast({
+            title: language === "ar" ? "تم حذف الرسالة" : "Message deleted",
+            description: language === "ar" ? "تم حذف الرسالة بنجاح" : "Message has been deleted successfully",
+          })
+        } catch (error) {
+          console.error("Error deleting message:", error)
+          toast({
+            title: language === "ar" ? "خطأ في حذف الرسالة" : "Error deleting message",
+            description: error.message,
+            variant: "destructive",
+          })
+        }
+      }
+    },
+    [language],
+  )
 
   // Image management functions
-  const handleManageImages = (product: Product) => {
+  const handleManageImages = useCallback((product: Product) => {
     setSelectedProduct(product)
     setIsManagingImages(true)
-  }
+  }, [])
 
-  const handleSetMainImage = async (imageId: number, productId: number) => {
-    try {
-      toast({
-        title: language === "ar" ? "جاري تعيين الصورة الرئيسية..." : "Setting main image...",
-        description: language === "ar" ? "يرجى الانتظار" : "Please wait",
-      })
-
-      // Execute operations in parallel
-      await Promise.all([
-        supabase.from("product_images").update({ is_main: false }).eq("product_id", productId),
-        supabase.from("product_images").update({ is_main: true }).eq("id", imageId),
-      ])
-
-      // Update the product's main image
-      const { data: imageData } = await supabase.from("product_images").select("image_url").eq("id", imageId).single()
-
-      if (imageData) {
-        await supabase.from("products").update({ image: imageData.image_url }).eq("id", productId)
-
-        // Optimistic update
-        setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, image: imageData.image_url } : p)))
-      }
-
-      // Update local images state
-      setProductImages((prev) => ({
-        ...prev,
-        [productId]:
-          prev[productId]?.map((img) => ({
-            ...img,
-            is_main: img.id === imageId,
-          })) || [],
-      }))
-
-      toast({
-        title: language === "ar" ? "تم تعيين الصورة الرئيسية" : "Main image set",
-        description: language === "ar" ? "تم تعيين الصورة الرئيسية بنجاح" : "Main image has been set successfully",
-      })
-    } catch (error) {
-      console.error("Error setting main image:", error)
-      toast({
-        title: language === "ar" ? "خطأ في تعيين الصورة الرئيسية" : "Error setting main image",
-        description: error.message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleDeleteProductImage = async (imageId: number, productId: number) => {
-    if (
-      window.confirm(
-        language === "ar" ? "هل أنت متأكد من حذف هذه الصورة؟" : "Are you sure you want to delete this image?",
-      )
-    ) {
+  const handleSetMainImage = useCallback(
+    async (imageId: number, productId: number) => {
       try {
         toast({
-          title: language === "ar" ? "جاري حذف الصورة..." : "Deleting image...",
+          title: language === "ar" ? "جاري تعيين الصورة الرئيسية..." : "Setting main image...",
           description: language === "ar" ? "يرجى الانتظار" : "Please wait",
         })
 
-        const { error } = await supabase.from("product_images").delete().eq("id", imageId)
-        if (error) throw error
+        // Execute operations in parallel
+        await Promise.all([
+          supabase.from("product_images").update({ is_main: false }).eq("product_id", productId),
+          supabase.from("product_images").update({ is_main: true }).eq("id", imageId),
+        ])
 
-        // Optimistic update
+        // Update the product's main image
+        const { data: imageData } = await supabase.from("product_images").select("image_url").eq("id", imageId).single()
+
+        if (imageData) {
+          await supabase.from("products").update({ image: imageData.image_url }).eq("id", productId)
+
+          // Optimistic update
+          setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, image: imageData.image_url } : p)))
+        }
+
+        // Update local images state
         setProductImages((prev) => ({
           ...prev,
-          [productId]: prev[productId]?.filter((img) => img.id !== imageId) || [],
+          [productId]:
+            prev[productId]?.map((img) => ({
+              ...img,
+              is_main: img.id === imageId,
+            })) || [],
         }))
 
         toast({
-          title: language === "ar" ? "تم حذف الصورة" : "Image deleted",
-          description: language === "ar" ? "تم حذف الصورة بنجاح" : "Image has been deleted successfully",
+          title: language === "ar" ? "تم تعيين الصورة الرئيسية" : "Main image set",
+          description: language === "ar" ? "تم تعيين الصورة الرئيسية بنجاح" : "Main image has been set successfully",
         })
       } catch (error) {
-        console.error("Error deleting image:", error)
+        console.error("Error setting main image:", error)
         toast({
-          title: language === "ar" ? "خطأ في حذف الصورة" : "Error deleting image",
+          title: language === "ar" ? "خطأ في تعيين الصورة الرئيسية" : "Error setting main image",
           description: error.message,
           variant: "destructive",
         })
       }
-    }
-  }
+    },
+    [language],
+  )
+
+  const handleDeleteProductImage = useCallback(
+    async (imageId: number, productId: number) => {
+      if (
+        window.confirm(
+          language === "ar" ? "هل أنت متأكد من حذف هذه الصورة؟" : "Are you sure you want to delete this image?",
+        )
+      ) {
+        try {
+          toast({
+            title: language === "ar" ? "جاري حذف الصورة..." : "Deleting image...",
+            description: language === "ar" ? "يرجى الانتظار" : "Please wait",
+          })
+
+          const { error } = await supabase.from("product_images").delete().eq("id", imageId)
+          if (error) throw error
+
+          // Optimistic update
+          setProductImages((prev) => ({
+            ...prev,
+            [productId]: prev[productId]?.filter((img) => img.id !== imageId) || [],
+          }))
+
+          toast({
+            title: language === "ar" ? "تم حذف الصورة" : "Image deleted",
+            description: language === "ar" ? "تم حذف الصورة بنجاح" : "Image has been deleted successfully",
+          })
+        } catch (error) {
+          console.error("Error deleting image:", error)
+          toast({
+            title: language === "ar" ? "خطأ في حذف الصورة" : "Error deleting image",
+            description: error.message,
+            variant: "destructive",
+          })
+        }
+      }
+    },
+    [language],
+  )
 
   // Utility functions
-  const getCategoryName = (categoryId: number | null) => {
-    if (!categoryId) return language === "ar" ? "بدون قسم" : "No Category"
-    const category = categories.find((cat) => cat.id === categoryId)
-    return category ? category[`name_${language}`] : language === "ar" ? "بدون قسم" : "No Category"
-  }
+  const getCategoryName = useCallback(
+    (categoryId: number | null) => {
+      if (!categoryId) return language === "ar" ? "بدون قسم" : "No Category"
+      const category = categories.find((cat) => cat.id === categoryId)
+      return category ? category[`name_${language}`] : language === "ar" ? "بدون قسم" : "No Category"
+    },
+    [categories, language],
+  )
 
-  const getOrderStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: {
-        color: "bg-yellow-100 text-yellow-800 border-yellow-300",
-        text: language === "ar" ? "قيد الانتظار" : "Pending",
-      },
-      processing: {
-        color: "bg-blue-100 text-blue-800 border-blue-300",
-        text: language === "ar" ? "قيد المعالجة" : "Processing",
-      },
-      shipped: {
-        color: "bg-purple-100 text-purple-800 border-purple-300",
-        text: language === "ar" ? "تم الشحن" : "Shipped",
-      },
-      delivered: {
-        color: "bg-green-100 text-green-800 border-green-300",
-        text: language === "ar" ? "تم التوصيل" : "Delivered",
-      },
-      cancelled: { color: "bg-red-100 text-red-800 border-red-300", text: language === "ar" ? "ملغي" : "Cancelled" },
-    }
-
-    const config = statusConfig[status] || { color: "bg-gray-100 text-gray-800 border-gray-300", text: status }
-    return (
-      <Badge variant="outline" className={config.color}>
-        {config.text}
-      </Badge>
-    )
-  }
-
-  const getColorName = (colorValue: string | null) => {
-    if (!colorValue) return null
-
-    for (const product of products) {
-      const variants = productVariants[product.id] || []
-      const colorVariant = variants.find((variant) => variant.variant_type === "color" && variant.value === colorValue)
-      if (colorVariant) {
-        return colorVariant[`name_${language}`]
+  const getOrderStatusBadge = useCallback(
+    (status: string) => {
+      const statusConfig = {
+        pending: {
+          color: "bg-yellow-100 text-yellow-800 border-yellow-300",
+          text: language === "ar" ? "قيد الانتظار" : "Pending",
+        },
+        processing: {
+          color: "bg-blue-100 text-blue-800 border-blue-300",
+          text: language === "ar" ? "قيد المعالجة" : "Processing",
+        },
+        shipped: {
+          color: "bg-purple-100 text-purple-800 border-purple-300",
+          text: language === "ar" ? "تم الشحن" : "Shipped",
+        },
+        delivered: {
+          color: "bg-green-100 text-green-800 border-green-300",
+          text: language === "ar" ? "تم التوصيل" : "Delivered",
+        },
+        cancelled: { color: "bg-red-100 text-red-800 border-red-300", text: language === "ar" ? "ملغي" : "Cancelled" },
       }
-    }
 
-    return colorValue
-  }
+      const config = statusConfig[status] || { color: "bg-gray-100 text-gray-800 border-gray-300", text: status }
+      return (
+        <Badge variant="outline" className={config.color}>
+          {config.text}
+        </Badge>
+      )
+    },
+    [language],
+  )
 
-  const filteredOrders = orders.filter((order) => {
-    const matchesSearch =
-      order.full_name.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      order.phone.includes(orderSearch) ||
-      order.order_number?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      order.id.toString().includes(orderSearch)
+  const getColorName = useCallback(
+    (colorValue: string | null) => {
+      if (!colorValue) return null
 
-    const matchesStatus = orderStatusFilter === "all" || order.status === orderStatusFilter
+      for (const product of products) {
+        const variants = productVariants[product.id] || []
+        const colorVariant = variants.find(
+          (variant) => variant.variant_type === "color" && variant.value === colorValue,
+        )
+        if (colorVariant) {
+          return colorVariant[`name_${language}`]
+        }
+      }
 
-    return matchesSearch && matchesStatus
-  })
+      return colorValue
+    },
+    [products, productVariants, language],
+  )
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await supabase.auth.signOut()
     router.push("/admin")
-  }
+  }, [router])
 
   if (isLoading) {
     return (
@@ -1301,6 +1829,7 @@ export default function AdminDashboard() {
           <TabsList className="mb-8">
             <TabsTrigger value="products">{language === "ar" ? "المنتجات" : "Products"}</TabsTrigger>
             <TabsTrigger value="categories">{language === "ar" ? "الأقسام" : "Categories"}</TabsTrigger>
+            <TabsTrigger value="variants">{language === "ar" ? "الألوان والمقاسات" : "Colors & Sizes"}</TabsTrigger>
             <TabsTrigger value="orders">{language === "ar" ? "الطلبات" : "Orders"}</TabsTrigger>
             <TabsTrigger value="messages">{language === "ar" ? "الرسائل" : "Messages"}</TabsTrigger>
           </TabsList>
@@ -1497,6 +2026,7 @@ export default function AdminDashboard() {
                               src={image || "/placeholder.svg"}
                               alt={`Preview ${index + 1}`}
                               className="w-full aspect-square object-cover rounded-md border"
+                              loading="lazy"
                             />
                             <button
                               type="button"
@@ -1531,6 +2061,8 @@ export default function AdminDashboard() {
                   {/* Colors Section */}
                   <div>
                     <h3 className="text-lg font-semibold mb-2">{language === "ar" ? "الألوان" : "Colors"}</h3>
+
+                    {/* Selected Colors */}
                     <div className="flex flex-wrap gap-2 mb-4">
                       {newVariants.colors.map((color, index) => (
                         <div key={index} className="flex items-center gap-2 bg-muted p-2 rounded-md">
@@ -1544,12 +2076,36 @@ export default function AdminDashboard() {
                             className="h-6 w-6 p-0"
                             onClick={() => handleRemoveColor(index)}
                           >
-                            <X className="h-4 w-4" />
+                            <X className="w-4 h-4" />
                           </Button>
                         </div>
                       ))}
                     </div>
 
+                    {/* Default Colors */}
+                    {defaultColors.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium mb-2">
+                          {language === "ar" ? "الألوان المحفوظة:" : "Saved Colors:"}
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {defaultColors.map((color) => (
+                            <button
+                              key={color.id}
+                              type="button"
+                              onClick={() => addColorFromDefaults(color)}
+                              className="flex items-center gap-2 bg-background border rounded-md p-2 hover:bg-muted transition-colors"
+                              title={language === "ar" ? "انقر للإضافة" : "Click to add"}
+                            >
+                              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: color.value }}></div>
+                              <span className="text-xs">{color[`name_${language}`]}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add New Color */}
                     {isAddingColor ? (
                       <div className="flex flex-wrap gap-2 mb-4">
                         <Input
@@ -1581,7 +2137,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <Button type="button" variant="outline" onClick={() => setIsAddingColor(true)}>
-                        {language === "ar" ? "إضافة لون" : "Add Color"}
+                        {language === "ar" ? "إضافة لون جديد" : "Add New Color"}
                       </Button>
                     )}
                   </div>
@@ -1589,6 +2145,8 @@ export default function AdminDashboard() {
                   {/* Sizes Section */}
                   <div>
                     <h3 className="text-lg font-semibold mb-2">{language === "ar" ? "المقاسات" : "Sizes"}</h3>
+
+                    {/* Selected Sizes */}
                     <div className="flex flex-wrap gap-2 mb-4">
                       {newVariants.sizes.map((size, index) => (
                         <div key={index} className="flex items-center gap-2 bg-muted p-2 rounded-md">
@@ -1601,12 +2159,35 @@ export default function AdminDashboard() {
                             className="h-6 w-6 p-0"
                             onClick={() => handleRemoveSize(index)}
                           >
-                            <X className="h-4 w-4" />
+                            <X className="w-4 h-4" />
                           </Button>
                         </div>
                       ))}
                     </div>
 
+                    {/* Default Sizes */}
+                    {defaultSizes.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium mb-2">
+                          {language === "ar" ? "المقاسات المحفوظة:" : "Saved Sizes:"}
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {defaultSizes.map((size) => (
+                            <button
+                              key={size.id}
+                              type="button"
+                              onClick={() => addSizeFromDefaults(size)}
+                              className="bg-background border rounded-md px-3 py-1 hover:bg-muted transition-colors text-xs"
+                              title={language === "ar" ? "انقر للإضافة" : "Click to add"}
+                            >
+                              {size[`name_${language}`]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add New Size */}
                     {isAddingSize ? (
                       <div className="flex flex-wrap gap-2 mb-4">
                         <Input
@@ -1638,7 +2219,7 @@ export default function AdminDashboard() {
                       </div>
                     ) : (
                       <Button type="button" variant="outline" onClick={() => setIsAddingSize(true)}>
-                        {language === "ar" ? "إضافة مقاس" : "Add Size"}
+                        {language === "ar" ? "إضافة مقاس جديد" : "Add New Size"}
                       </Button>
                     )}
                   </div>
@@ -1680,486 +2261,346 @@ export default function AdminDashboard() {
                   </Card>
                 ) : (
                   products.map((product) => (
-                    <Card key={product.id}>
-                      <CardContent className="p-6">
-                        {editingProduct && editingProduct.id === product.id ? (
-                          <div className="space-y-6">
-                            {/* Edit Form */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium mb-2">
-                                  {language === "ar" ? "الاسم (عربي)" : "Name (Arabic)"}
-                                </label>
-                                <Input
-                                  value={editingProduct.title_ar}
-                                  onChange={(e) => setEditingProduct({ ...editingProduct, title_ar: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">
-                                  {language === "ar" ? "الاسم (إنجليزي)" : "Name (English)"}
-                                </label>
-                                <Input
-                                  value={editingProduct.title_en}
-                                  onChange={(e) => setEditingProduct({ ...editingProduct, title_en: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">
-                                  {language === "ar" ? "الوصف (عربي)" : "Description (Arabic)"}
-                                </label>
-                                <Textarea
-                                  value={editingProduct.description_ar}
-                                  onChange={(e) =>
-                                    setEditingProduct({ ...editingProduct, description_ar: e.target.value })
-                                  }
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">
-                                  {language === "ar" ? "الوصف (إنجليزي)" : "Description (English)"}
-                                </label>
-                                <Textarea
-                                  value={editingProduct.description_en}
-                                  onChange={(e) =>
-                                    setEditingProduct({ ...editingProduct, description_en: e.target.value })
-                                  }
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">
-                                  {language === "ar" ? "السعر القديم" : "Old Price"}
-                                </label>
-                                <Input
-                                  type="number"
-                                  value={editingProduct.old_price || ""}
-                                  onChange={(e) =>
-                                    setEditingProduct({
-                                      ...editingProduct,
-                                      old_price: e.target.value ? Number.parseFloat(e.target.value) : null,
-                                    })
-                                  }
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">
-                                  {language === "ar" ? "القسم" : "Category"}
-                                </label>
-                                <Select
-                                  value={editingProduct.category_id?.toString() || "none"}
-                                  onValueChange={(value) =>
-                                    setEditingProduct({
-                                      ...editingProduct,
-                                      category_id: value === "none" ? null : Number.parseInt(value),
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder={language === "ar" ? "اختر القسم" : "Select Category"} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">
-                                      {language === "ar" ? "بدون قسم" : "No Category"}
-                                    </SelectItem>
-                                    {categories.map((category) => (
-                                      <SelectItem key={category.id} value={category.id.toString()}>
-                                        {category[`name_${language}`]}
+                    <div key={product.id}>
+                      {editingProduct && editingProduct.id === product.id ? (
+                        <Card>
+                          <CardContent className="p-6">
+                            <div className="space-y-6">
+                              {/* Edit Form - Removed image upload section */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "الاسم (عربي)" : "Name (Arabic)"}
+                                  </label>
+                                  <Input
+                                    value={editingProduct.title_ar}
+                                    onChange={(e) => setEditingProduct({ ...editingProduct, title_ar: e.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "الاسم (إنجليزي)" : "Name (English)"}
+                                  </label>
+                                  <Input
+                                    value={editingProduct.title_en}
+                                    onChange={(e) => setEditingProduct({ ...editingProduct, title_en: e.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "الوصف (عربي)" : "Description (Arabic)"}
+                                  </label>
+                                  <Textarea
+                                    value={editingProduct.description_ar}
+                                    onChange={(e) =>
+                                      setEditingProduct({ ...editingProduct, description_ar: e.target.value })
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "الوصف (إنجليزي)" : "Description (English)"}
+                                  </label>
+                                  <Textarea
+                                    value={editingProduct.description_en}
+                                    onChange={(e) =>
+                                      setEditingProduct({ ...editingProduct, description_en: e.target.value })
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "السعر" : "Price"}
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    value={editingProduct.price}
+                                    onChange={(e) =>
+                                      setEditingProduct({
+                                        ...editingProduct,
+                                        price: Number.parseFloat(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "السعر القديم" : "Old Price"}
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    value={editingProduct.old_price || ""}
+                                    onChange={(e) =>
+                                      setEditingProduct({
+                                        ...editingProduct,
+                                        old_price: e.target.value ? Number.parseFloat(e.target.value) : null,
+                                      })
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "القسم" : "Category"}
+                                  </label>
+                                  <Select
+                                    value={editingProduct.category_id?.toString() || "none"}
+                                    onValueChange={(value) =>
+                                      setEditingProduct({
+                                        ...editingProduct,
+                                        category_id: value === "none" ? null : Number.parseInt(value),
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder={language === "ar" ? "اختر القسم" : "Select Category"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">
+                                        {language === "ar" ? "بدون قسم" : "No Category"}
                                       </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`edit-in-stock-${product.id}`}
-                                  checked={editingProduct.in_stock}
-                                  onCheckedChange={(checked) =>
-                                    setEditingProduct({ ...editingProduct, in_stock: !!checked })
-                                  }
-                                />
-                                <label htmlFor={`edit-in-stock-${product.id}`} className="text-sm font-medium">
-                                  {language === "ar" ? "متوفر في المخزون" : "In Stock"}
-                                </label>
-                              </div>
-                            </div>
-
-                            {/* Edit Images Upload */}
-                            <div>
-                              <label className="block text-sm font-medium mb-2">
-                                {language === "ar" ? "صور المنتج" : "Product Images"}
-                              </label>
-                              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 hover:border-muted-foreground/50 transition-colors">
-                                <div className="text-center">
-                                  <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                                  <div className="mt-4">
-                                    <label htmlFor={`edit-product-images-${product.id}`} className="cursor-pointer">
-                                      <span className="mt-2 block text-sm font-medium text-muted-foreground">
-                                        {language === "ar"
-                                          ? "اسحب الصور هنا أو انقر للاختيار"
-                                          : "Drag images here or click to select"}
-                                      </span>
-                                      <input
-                                        id={`edit-product-images-${product.id}`}
-                                        type="file"
-                                        multiple
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => handleImageUpload(e.target.files, true)}
-                                        disabled={uploadingImage}
-                                      />
-                                    </label>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="mt-2 bg-transparent"
-                                      onClick={() =>
-                                        document.getElementById(`edit-product-images-${product.id}`)?.click()
-                                      }
-                                      disabled={uploadingImage}
-                                    >
-                                      <Upload className="w-4 h-4 mr-2" />
-                                      {uploadingImage
-                                        ? language === "ar"
-                                          ? "جاري الرفع..."
-                                          : "Uploading..."
-                                        : language === "ar"
-                                          ? "اختر الصور"
-                                          : "Choose Images"}
-                                    </Button>
-                                  </div>
+                                      {categories.map((category) => (
+                                        <SelectItem key={category.id} value={category.id.toString()}>
+                                          {category[`name_${language}`]}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`edit-in-stock-${product.id}`}
+                                    checked={editingProduct.in_stock}
+                                    onCheckedChange={(checked) =>
+                                      setEditingProduct({ ...editingProduct, in_stock: !!checked })
+                                    }
+                                  />
+                                  <label htmlFor={`edit-in-stock-${product.id}`} className="text-sm font-medium">
+                                    {language === "ar" ? "متوفر في المخزون" : "In Stock"}
+                                  </label>
                                 </div>
                               </div>
 
-                              {/* Edit Image Previews */}
-                              {editPreviewImages.length > 0 && (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
-                                  {editPreviewImages.map((image, index) => (
-                                    <div key={index} className="relative group">
-                                      <img
-                                        src={image || "/placeholder.svg"}
-                                        alt={`Preview ${index + 1}`}
-                                        className="w-full aspect-square object-cover rounded-md border"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => removePreviewImage(index, true)}
-                                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              {/* Edit Colors Section */}
+                              <div>
+                                <h3 className="text-lg font-semibold mb-2">
+                                  {language === "ar" ? "الألوان" : "Colors"}
+                                </h3>
+
+                                {/* Selected Colors */}
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                  {editingVariants.colors.map((color, index) => (
+                                    <div key={index} className="flex items-center gap-2 bg-muted p-2 rounded-md">
+                                      <div
+                                        className="w-6 h-6 rounded-full"
+                                        style={{ backgroundColor: color.value }}
+                                      ></div>
+                                      <span>
+                                        {color.name_en} / {color.name_ar}
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => handleRemoveEditColor(index)}
                                       >
                                         <X className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setMainImage(index, true)}
-                                        className={`absolute top-2 left-2 rounded-full p-1 transition-opacity ${
-                                          editMainImageIndex === index
-                                            ? "bg-yellow-500 text-white opacity-100"
-                                            : "bg-gray-500 text-white opacity-0 group-hover:opacity-100"
-                                        }`}
-                                        title={language === "ar" ? "تعيين كصورة رئيسية" : "Set as main image"}
-                                      >
-                                        <Star className="w-4 h-4" />
-                                      </button>
-                                      {editMainImageIndex === index && (
-                                        <div className="absolute bottom-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded">
-                                          {language === "ar" ? "رئيسية" : "Main"}
-                                        </div>
-                                      )}
+                                      </Button>
                                     </div>
                                   ))}
                                 </div>
-                              )}
-                            </div>
 
-                            {/* Edit Colors Section */}
-                            <div>
-                              <h3 className="text-lg font-semibold mb-2">{language === "ar" ? "الألوان" : "Colors"}</h3>
-                              <div className="flex flex-wrap gap-2 mb-4">
-                                {editingVariants.colors.map((color, index) => (
-                                  <div key={index} className="flex items-center gap-2 bg-muted p-2 rounded-md">
-                                    <div
-                                      className="w-6 h-6 rounded-full"
-                                      style={{ backgroundColor: color.value }}
-                                    ></div>
-                                    <span>
-                                      {color.name_en} / {color.name_ar}
-                                    </span>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0"
-                                      onClick={() => handleRemoveEditColor(index)}
-                                    >
-                                      <X className="h-4 w-4" />
+                                {/* Default Colors */}
+                                {defaultColors.length > 0 && (
+                                  <div className="mb-4">
+                                    <h4 className="text-sm font-medium mb-2">
+                                      {language === "ar" ? "الألوان المحفوظة:" : "Saved Colors:"}
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {defaultColors.map((color) => (
+                                        <button
+                                          key={color.id}
+                                          type="button"
+                                          onClick={() => addEditColorFromDefaults(color)}
+                                          className="flex items-center gap-2 bg-background border rounded-md p-2 hover:bg-muted transition-colors"
+                                          title={language === "ar" ? "انقر للإضافة" : "Click to add"}
+                                        >
+                                          <div
+                                            className="w-4 h-4 rounded-full"
+                                            style={{ backgroundColor: color.value }}
+                                          ></div>
+                                          <span className="text-xs">{color[`name_${language}`]}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Add New Color */}
+                                {isEditingColor ? (
+                                  <div className="flex flex-wrap gap-2 mb-4">
+                                    <Input
+                                      placeholder={language === "ar" ? "اسم اللون (عربي)" : "Color Name (Arabic)"}
+                                      value={editColor.name_ar}
+                                      onChange={(e) => setEditColor({ ...editColor, name_ar: e.target.value })}
+                                      className="flex-1 min-w-[150px]"
+                                    />
+                                    <Input
+                                      placeholder={
+                                        language === "ar"
+                                          ? "اسم اللون (إنجليزي) - اختياري"
+                                          : "Color Name (English) - Optional"
+                                      }
+                                      value={editColor.name_en}
+                                      onChange={(e) => setEditColor({ ...editColor, name_en: e.target.value })}
+                                      className="flex-1 min-w-[150px]"
+                                    />
+                                    <Input
+                                      type="color"
+                                      value={editColor.value}
+                                      onChange={(e) => setEditColor({ ...editColor, value: e.target.value })}
+                                      className="w-20"
+                                    />
+                                    <Button type="button" onClick={handleAddEditColor}>
+                                      {language === "ar" ? "إضافة" : "Add"}
+                                    </Button>
+                                    <Button type="button" variant="outline" onClick={() => setIsEditingColor(false)}>
+                                      {language === "ar" ? "إلغاء" : "Cancel"}
                                     </Button>
                                   </div>
-                                ))}
-                              </div>
-
-                              {isEditingColor ? (
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                  <Input
-                                    placeholder={language === "ar" ? "اسم اللون (عربي)" : "Color Name (Arabic)"}
-                                    value={editColor.name_ar}
-                                    onChange={(e) => setEditColor({ ...editColor, name_ar: e.target.value })}
-                                    className="flex-1 min-w-[150px]"
-                                  />
-                                  <Input
-                                    placeholder={
-                                      language === "ar"
-                                        ? "اسم اللون (إنجليزي) - اختياري"
-                                        : "Color Name (English) - Optional"
-                                    }
-                                    value={editColor.name_en}
-                                    onChange={(e) => setEditColor({ ...editColor, name_en: e.target.value })}
-                                    className="flex-1 min-w-[150px]"
-                                  />
-                                  <Input
-                                    type="color"
-                                    value={editColor.value}
-                                    onChange={(e) => setEditColor({ ...editColor, value: e.target.value })}
-                                    className="w-20"
-                                  />
-                                  <Button type="button" onClick={handleAddEditColor}>
-                                    {language === "ar" ? "إضافة" : "Add"}
-                                  </Button>
-                                  <Button type="button" variant="outline" onClick={() => setIsEditingColor(false)}>
-                                    {language === "ar" ? "إلغاء" : "Cancel"}
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Button type="button" variant="outline" onClick={() => setIsEditingColor(true)}>
-                                  {language === "ar" ? "إضافة لون" : "Add Color"}
-                                </Button>
-                              )}
-                            </div>
-
-                            {/* Edit Sizes Section */}
-                            <div>
-                              <h3 className="text-lg font-semibold mb-2">{language === "ar" ? "المقاسات" : "Sizes"}</h3>
-                              <div className="flex flex-wrap gap-2 mb-4">
-                                {editingVariants.sizes.map((size, index) => (
-                                  <div key={index} className="flex items-center gap-2 bg-muted p-2 rounded-md">
-                                    <span>
-                                      {size.value} ({size.name_en} / {size.name_ar})
-                                    </span>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0"
-                                      onClick={() => handleRemoveEditSize(index)}
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-
-                              {isEditingSize ? (
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                  <Input
-                                    placeholder={language === "ar" ? "اسم المقاس (عربي)" : "Size Name (Arabic)"}
-                                    value={editSize.name_ar}
-                                    onChange={(e) => setEditSize({ ...editSize, name_ar: e.target.value })}
-                                    className="flex-1 min-w-[150px]"
-                                  />
-                                  <Input
-                                    placeholder={
-                                      language === "ar"
-                                        ? "اسم المقاس (إنجليزي) - اختياري"
-                                        : "Size Name (English) - Optional"
-                                    }
-                                    value={editSize.name_en}
-                                    onChange={(e) => setEditSize({ ...editSize, name_en: e.target.value })}
-                                    className="flex-1 min-w-[150px]"
-                                  />
-                                  <Input
-                                    placeholder={language === "ar" ? "قيمة المقاس (مثل XL)" : "Size Value (e.g. XL)"}
-                                    value={editSize.value}
-                                    onChange={(e) => setEditSize({ ...editSize, value: e.target.value })}
-                                    className="flex-1 min-w-[100px]"
-                                  />
-                                  <Button type="button" onClick={handleAddEditSize}>
-                                    {language === "ar" ? "إضافة" : "Add"}
-                                  </Button>
-                                  <Button type="button" variant="outline" onClick={() => setIsEditingSize(false)}>
-                                    {language === "ar" ? "إلغاء" : "Cancel"}
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Button type="button" variant="outline" onClick={() => setIsEditingSize(true)}>
-                                  {language === "ar" ? "إضافة مقاس" : "Add Size"}
-                                </Button>
-                              )}
-                            </div>
-
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={handleSaveProductEdit}
-                                disabled={isSavingProduct || editPreviewImages.length === 0}
-                                className="flex-1"
-                              >
-                                {isSavingProduct ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    {language === "ar" ? "جاري الحفظ..." : "Saving..."}
-                                  </>
                                 ) : (
-                                  <>
-                                    <Save className="w-4 h-4 mr-2" />
-                                    {language === "ar" ? "حفظ التعديلات" : "Save Changes"}
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingProduct(null)
-                                  setEditingVariants({ colors: [], sizes: [] })
-                                  setEditPreviewImages([])
-                                  setEditMainImageIndex(0)
-                                }}
-                              >
-                                {language === "ar" ? "إلغاء" : "Cancel"}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {/* Product Image */}
-                            <div className="md:col-span-1">
-                              <img
-                                src={product.image || "/placeholder.svg"}
-                                alt={product[`title_${language}`]}
-                                className="w-full aspect-square object-cover rounded-lg"
-                              />
-                            </div>
-
-                            {/* Product Info */}
-                            <div className="md:col-span-2 space-y-2">
-                              <h3 className="text-xl font-semibold">{product[`title_${language}`]}</h3>
-                              <p className="text-gray-600">{product[`description_${language}`]}</p>
-                              <div className="flex items-center gap-3">
-                                <span className="text-lg font-bold">DA {product.price.toLocaleString()}</span>
-                                {product.old_price && (
-                                  <span className="text-gray-500 line-through">
-                                    DA {product.old_price.toLocaleString()}
-                                  </span>
+                                  <Button type="button" variant="outline" onClick={() => setIsEditingColor(true)}>
+                                    {language === "ar" ? "إضافة لون جديد" : "Add New Color"}
+                                  </Button>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                {product.in_stock ? (
-                                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-                                    {language === "ar" ? "متوفر" : "In Stock"}
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
-                                    {language === "ar" ? "غير متوفر" : "Out of Stock"}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-500">
-                                {language === "ar" ? "القسم:" : "Category:"} {getCategoryName(product.category_id)}
-                              </p>
 
-                              {/* Product Images */}
-                              {productImages[product.id] && productImages[product.id].length > 0 && (
-                                <div className="mt-4">
-                                  <h4 className="font-medium mb-2">
-                                    {language === "ar" ? "صور المنتج:" : "Product Images:"}
-                                  </h4>
-                                  <div className="flex flex-wrap gap-2">
-                                    {productImages[product.id].map((image) => (
-                                      <div
-                                        key={image.id}
-                                        className={`relative w-16 h-16 rounded-md overflow-hidden border-2 ${
-                                          image.is_main ? "border-primary" : "border-border"
-                                        }`}
+                              {/* Edit Sizes Section */}
+                              <div>
+                                <h3 className="text-lg font-semibold mb-2">
+                                  {language === "ar" ? "المقاسات" : "Sizes"}
+                                </h3>
+
+                                {/* Selected Sizes */}
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                  {editingVariants.sizes.map((size, index) => (
+                                    <div key={index} className="flex items-center gap-2 bg-muted p-2 rounded-md">
+                                      <span>
+                                        {size.value} ({size.name_en} / {size.name_ar})
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => handleRemoveEditSize(index)}
                                       >
-                                        <img
-                                          src={image.image_url || "/placeholder.svg"}
-                                          alt={product[`title_${language}`]}
-                                          className="w-full h-full object-cover"
-                                        />
-                                        {image.is_main && (
-                                          <div className="absolute bottom-0 left-0 right-0 bg-primary/70 text-white text-[8px] text-center">
-                                            {language === "ar" ? "رئيسية" : "Main"}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Default Sizes */}
+                                {defaultSizes.length > 0 && (
+                                  <div className="mb-4">
+                                    <h4 className="text-sm font-medium mb-2">
+                                      {language === "ar" ? "المقاسات المحفوظة:" : "Saved Sizes:"}
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {defaultSizes.map((size) => (
+                                        <button
+                                          key={size.id}
+                                          type="button"
+                                          onClick={() => addEditSizeFromDefaults(size)}
+                                          className="bg-background border rounded-md px-3 py-1 hover:bg-muted transition-colors text-xs"
+                                          title={language === "ar" ? "انقر للإضافة" : "Click to add"}
+                                        >
+                                          {size[`name_${language}`]}
+                                        </button>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
 
-                              {/* Product Variants */}
-                              {productVariants[product.id] && productVariants[product.id].length > 0 && (
-                                <div className="mt-4">
-                                  <h4 className="font-medium mb-2">
-                                    {language === "ar" ? "الخيارات المتاحة:" : "Available Options:"}
-                                  </h4>
+                                {/* Add New Size */}
+                                {isEditingSize ? (
+                                  <div className="flex flex-wrap gap-2 mb-4">
+                                    <Input
+                                      placeholder={language === "ar" ? "اسم المقاس (عربي)" : "Size Name (Arabic)"}
+                                      value={editSize.name_ar}
+                                      onChange={(e) => setEditSize({ ...editSize, name_ar: e.target.value })}
+                                      className="flex-1 min-w-[150px]"
+                                    />
+                                    <Input
+                                      placeholder={
+                                        language === "ar"
+                                          ? "اسم المقاس (إنجليزي) - اختياري"
+                                          : "Size Name (English) - Optional"
+                                      }
+                                      value={editSize.name_en}
+                                      onChange={(e) => setEditSize({ ...editSize, name_en: e.target.value })}
+                                      className="flex-1 min-w-[150px]"
+                                    />
+                                    <Input
+                                      placeholder={language === "ar" ? "قيمة المقاس (مثل XL)" : "Size Value (e.g. XL)"}
+                                      value={editSize.value}
+                                      onChange={(e) => setEditSize({ ...editSize, value: e.target.value })}
+                                      className="flex-1 min-w-[100px]"
+                                    />
+                                    <Button type="button" onClick={handleAddEditSize}>
+                                      {language === "ar" ? "إضافة" : "Add"}
+                                    </Button>
+                                    <Button type="button" variant="outline" onClick={() => setIsEditingSize(false)}>
+                                      {language === "ar" ? "إلغاء" : "Cancel"}
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button type="button" variant="outline" onClick={() => setIsEditingSize(true)}>
+                                    {language === "ar" ? "إضافة مقاس جديد" : "Add New Size"}
+                                  </Button>
+                                )}
+                              </div>
 
-                                  {/* Colors */}
-                                  {productVariants[product.id].filter((v) => v.variant_type === "color").length > 0 && (
-                                    <div className="mb-2">
-                                      <span className="text-sm font-medium">
-                                        {language === "ar" ? "الألوان:" : "Colors:"}
-                                      </span>
-                                      <div className="flex flex-wrap gap-2 mt-1">
-                                        {productVariants[product.id]
-                                          .filter((v) => v.variant_type === "color")
-                                          .map((color) => (
-                                            <div key={color.id} className="flex items-center gap-1">
-                                              <div
-                                                className="w-4 h-4 rounded-full"
-                                                style={{ backgroundColor: color.value }}
-                                              ></div>
-                                              <span className="text-xs">{color[`name_${language}`]}</span>
-                                            </div>
-                                          ))}
-                                      </div>
-                                    </div>
+                              <div className="flex gap-2">
+                                <Button onClick={handleSaveProductEdit} disabled={isSavingProduct} className="flex-1">
+                                  {isSavingProduct ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                      {language === "ar" ? "جاري الحفظ..." : "Saving..."}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className="w-4 h-4 mr-2" />
+                                      {language === "ar" ? "حفظ التعديلات" : "Save Changes"}
+                                    </>
                                   )}
-
-                                  {/* Sizes */}
-                                  {productVariants[product.id].filter((v) => v.variant_type === "size").length > 0 && (
-                                    <div>
-                                      <span className="text-sm font-medium">
-                                        {language === "ar" ? "المقاسات:" : "Sizes:"}
-                                      </span>
-                                      <div className="flex flex-wrap gap-2 mt-1">
-                                        {productVariants[product.id]
-                                          .filter((v) => v.variant_type === "size")
-                                          .map((size) => (
-                                            <span key={size.id} className="text-xs bg-muted px-2 py-1 rounded">
-                                              {size[`name_${language}`]}
-                                            </span>
-                                          ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingProduct(null)
+                                    setEditingVariants({ colors: [], sizes: [] })
+                                  }}
+                                >
+                                  {language === "ar" ? "إلغاء" : "Cancel"}
+                                </Button>
+                              </div>
                             </div>
-
-                            {/* Product Actions */}
-                            <div className="md:col-span-3 flex justify-end gap-2 mt-4">
-                              <Button variant="outline" size="sm" onClick={() => handleManageImages(product)}>
-                                <ImageIcon className="w-4 h-4 mr-2" />
-                                {language === "ar" ? "إدارة الصور" : "Manage Images"}
-                              </Button>
-                              <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                {language === "ar" ? "تعديل" : "Edit"}
-                              </Button>
-                              <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product.id)}>
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                {language === "ar" ? "حذف" : "Delete"}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <ProductCard
+                          product={product}
+                          language={language}
+                          categories={categories}
+                          productImages={productImages}
+                          productVariants={productVariants}
+                          onEdit={handleEditProduct}
+                          onDelete={handleDeleteProduct}
+                          onManageImages={handleManageImages}
+                          getCategoryName={getCategoryName}
+                        />
+                      )}
+                    </div>
                   ))
                 )}
               </div>
@@ -2316,41 +2757,191 @@ export default function AdminDashboard() {
             </div>
           </TabsContent>
 
+          {/* Variants Tab - New Tab for managing default colors and sizes */}
+          <TabsContent value="variants">
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-semibold">
+                  {language === "ar" ? "إدارة الألوان والمقاسات الافتراضية" : "Manage Default Colors & Sizes"}
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Default Colors Management */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Palette className="w-5 h-5" />
+                      {language === "ar" ? "الألوان الافتراضية" : "Default Colors"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Add New Default Color */}
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3">
+                        <Input
+                          placeholder={language === "ar" ? "اسم اللون (عربي)" : "Color Name (Arabic)"}
+                          value={newDefaultColor.name_ar}
+                          onChange={(e) => setNewDefaultColor({ ...newDefaultColor, name_ar: e.target.value })}
+                        />
+                        <Input
+                          placeholder={
+                            language === "ar" ? "اسم اللون (إنجليزي) - اختياري" : "Color Name (English) - Optional"
+                          }
+                          value={newDefaultColor.name_en}
+                          onChange={(e) => setNewDefaultColor({ ...newDefaultColor, name_en: e.target.value })}
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={newDefaultColor.value}
+                            onChange={(e) => setNewDefaultColor({ ...newDefaultColor, value: e.target.value })}
+                            className="w-20"
+                          />
+                          <Button onClick={handleAddDefaultColor} className="flex-1">
+                            <Plus className="w-4 h-4 mr-2" />
+                            {language === "ar" ? "إضافة لون" : "Add Color"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Default Colors List */}
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {defaultColors.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">
+                          {language === "ar" ? "لا توجد ألوان افتراضية" : "No default colors"}
+                        </p>
+                      ) : (
+                        defaultColors.map((color) => (
+                          <div key={color.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: color.value }}></div>
+                              <span>{color[`name_${language}`]}</span>
+                            </div>
+                            <Button variant="destructive" size="sm" onClick={() => handleDeleteDefaultColor(color.id)}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {language === "ar" ? "حذف" : "Delete"}
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Default Sizes Management */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Ruler className="w-5 h-5" />
+                      {language === "ar" ? "المقاسات الافتراضية" : "Default Sizes"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Add New Default Size */}
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-3">
+                        <Input
+                          placeholder={language === "ar" ? "اسم المقاس (عربي)" : "Size Name (Arabic)"}
+                          value={newDefaultSize.name_ar}
+                          onChange={(e) => setNewDefaultSize({ ...newDefaultSize, name_ar: e.target.value })}
+                        />
+                        <Input
+                          placeholder={
+                            language === "ar" ? "اسم المقاس (إنجليزي) - اختياري" : "Size Name (English) - Optional"
+                          }
+                          value={newDefaultSize.name_en}
+                          onChange={(e) => setNewDefaultSize({ ...newDefaultSize, name_en: e.target.value })}
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder={language === "ar" ? "قيمة المقاس (مثل XL)" : "Size Value (e.g. XL)"}
+                            value={newDefaultSize.value}
+                            onChange={(e) => setNewDefaultSize({ ...newDefaultSize, value: e.target.value })}
+                            className="flex-1"
+                          />
+                          <Button onClick={handleAddDefaultSize}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            {language === "ar" ? "إضافة مقاس" : "Add Size"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Default Sizes List */}
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {defaultSizes.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">
+                          {language === "ar" ? "لا توجد مقاسات افتراضية" : "No default sizes"}
+                        </p>
+                      ) : (
+                        defaultSizes.map((size) => (
+                          <div key={size.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <span className="bg-background border rounded px-2 py-1 text-sm">{size.value}</span>
+                              <span>{size[`name_${language}`]}</span>
+                            </div>
+                            <Button variant="destructive" size="sm" onClick={() => handleDeleteDefaultSize(size.id)}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {language === "ar" ? "حذف" : "Delete"}
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
           {/* Orders Tab */}
           <TabsContent value="orders">
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-semibold">{language === "ar" ? "إدارة الطلبات" : "Manage Orders"}</h2>
                 <div className="text-sm text-muted-foreground">
-                  {language === "ar" ? "إجمالي الطلبات:" : "Total Orders:"} {filteredOrders.length}
+                  {language === "ar" ? "إجمالي الطلبات:" : "Total Orders:"} {orders.length}
                 </div>
               </div>
 
-              {/* Search and Filter */}
+              {/* Filters */}
               <Card>
-                <CardHeader>
-                  <CardTitle>{language === "ar" ? "البحث والفلترة" : "Search & Filter"}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="p-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      placeholder={language === "ar" ? "البحث في الطلبات..." : "Search orders..."}
-                      value={orderSearch}
-                      onChange={(e) => setOrderSearch(e.target.value)}
-                    />
-                    <Select value={orderStatusFilter} onValueChange={setOrderStatusFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={language === "ar" ? "فلترة حسب الحالة" : "Filter by Status"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{language === "ar" ? "جميع الحالات" : "All Status"}</SelectItem>
-                        <SelectItem value="pending">{language === "ar" ? "قيد الانتظار" : "Pending"}</SelectItem>
-                        <SelectItem value="processing">{language === "ar" ? "قيد المعالجة" : "Processing"}</SelectItem>
-                        <SelectItem value="shipped">{language === "ar" ? "تم الشحن" : "Shipped"}</SelectItem>
-                        <SelectItem value="delivered">{language === "ar" ? "تم التوصيل" : "Delivered"}</SelectItem>
-                        <SelectItem value="cancelled">{language === "ar" ? "ملغي" : "Cancelled"}</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">{language === "ar" ? "البحث" : "Search"}</label>
+                      <Input
+                        placeholder={
+                          language === "ar"
+                            ? "البحث بالاسم، الهاتف، أو رقم الطلب..."
+                            : "Search by name, phone, or order number..."
+                        }
+                        value={orderSearch}
+                        onChange={(e) => setOrderSearch(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        {language === "ar" ? "تصفية حسب الحالة" : "Filter by Status"}
+                      </label>
+                      <Select value={orderStatusFilter} onValueChange={setOrderStatusFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={language === "ar" ? "جميع الحالات" : "All Statuses"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{language === "ar" ? "جميع الحالات" : "All Statuses"}</SelectItem>
+                          <SelectItem value="pending">{language === "ar" ? "قيد الانتظار" : "Pending"}</SelectItem>
+                          <SelectItem value="processing">
+                            {language === "ar" ? "قيد المعالجة" : "Processing"}
+                          </SelectItem>
+                          <SelectItem value="shipped">{language === "ar" ? "تم الشحن" : "Shipped"}</SelectItem>
+                          <SelectItem value="delivered">{language === "ar" ? "تم التوصيل" : "Delivered"}</SelectItem>
+                          <SelectItem value="cancelled">{language === "ar" ? "ملغي" : "Cancelled"}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -2361,13 +2952,13 @@ export default function AdminDashboard() {
                   <Card>
                     <CardContent className="text-center py-12">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        🛒
+                        📋
                       </div>
                       <p className="text-gray-500 text-lg">
                         {orderSearch || orderStatusFilter !== "all"
                           ? language === "ar"
-                            ? "لا توجد طلبات تطابق معايير البحث"
-                            : "No orders match the search criteria"
+                            ? "لا توجد طلبات تطابق البحث"
+                            : "No orders match your search"
                           : language === "ar"
                             ? "لا توجد طلبات بعد"
                             : "No orders yet"}
@@ -2376,112 +2967,16 @@ export default function AdminDashboard() {
                   </Card>
                 ) : (
                   filteredOrders.map((order) => (
-                    <Card key={order.id}>
-                      <CardContent className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* Order Info */}
-                          <div className="md:col-span-2 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-xl font-semibold">
-                                {language === "ar" ? "الطلب رقم:" : "Order #:"} {order.order_number || `#${order.id}`}
-                              </h3>
-                              {getOrderStatusBadge(order.status)}
-                            </div>
-                            <p className="text-gray-600">
-                              {language === "ar" ? "الاسم:" : "Name:"} {order.full_name}
-                            </p>
-                            <p className="text-gray-600">
-                              {language === "ar" ? "الهاتف:" : "Phone:"} {order.phone}
-                            </p>
-                            <p className="text-gray-600">
-                              {language === "ar" ? "العنوان:" : "Address:"} {order.state}, {order.city}
-                            </p>
-                            <p className="text-gray-600">
-                              {language === "ar" ? "المبلغ الإجمالي:" : "Total Amount:"} DA{" "}
-                              {order.total_amount.toLocaleString()}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {language === "ar" ? "تاريخ الطلب:" : "Order Date:"}{" "}
-                              {new Date(order.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-
-                          {/* Order Actions */}
-                          <div className="md:col-span-1 space-y-2">
-                            <Select
-                              value={order.status}
-                              onValueChange={(value) => handleUpdateOrderStatus(order.id, value)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder={language === "ar" ? "تغيير الحالة" : "Change Status"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">
-                                  {language === "ar" ? "قيد الانتظار" : "Pending"}
-                                </SelectItem>
-                                <SelectItem value="processing">
-                                  {language === "ar" ? "قيد المعالجة" : "Processing"}
-                                </SelectItem>
-                                <SelectItem value="shipped">{language === "ar" ? "تم الشحن" : "Shipped"}</SelectItem>
-                                <SelectItem value="delivered">
-                                  {language === "ar" ? "تم التوصيل" : "Delivered"}
-                                </SelectItem>
-                                <SelectItem value="cancelled">{language === "ar" ? "ملغي" : "Cancelled"}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setSelectedOrder(order)}
-                              className="w-full"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              {language === "ar" ? "عرض التفاصيل" : "View Details"}
-                            </Button>
-                          </div>
-
-                          {/* Order Items */}
-                          {orderItems[order.id] && orderItems[order.id].length > 0 && (
-                            <div className="md:col-span-3 mt-4 pt-4 border-t">
-                              <h4 className="text-lg font-semibold mb-2">
-                                {language === "ar" ? "المنتجات المطلوبة" : "Order Items"}
-                              </h4>
-                              <div className="space-y-2">
-                                {orderItems[order.id].map((item) => (
-                                  <div key={item.id} className="flex justify-between items-center p-2 bg-muted rounded">
-                                    <div>
-                                      <p className="font-medium">{item.product_title}</p>
-                                      <div className="text-sm text-muted-foreground">
-                                        {item.color && (
-                                          <span>
-                                            {language === "ar" ? "اللون:" : "Color:"}{" "}
-                                            {getColorName(item.color) || item.color}
-                                          </span>
-                                        )}
-                                        {item.color && item.size && " • "}
-                                        {item.size && (
-                                          <span>
-                                            {language === "ar" ? "المقاس:" : "Size:"} {item.size}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="font-medium">
-                                        {item.quantity} × DA {item.product_price.toLocaleString()}
-                                      </p>
-                                      <p className="text-sm text-muted-foreground">
-                                        DA {(item.quantity * item.product_price).toLocaleString()}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      language={language}
+                      orderItems={orderItems}
+                      onUpdateStatus={handleUpdateOrderStatus}
+                      onViewDetails={(order) => setSelectedOrder(order)}
+                      getOrderStatusBadge={getOrderStatusBadge}
+                      getColorName={getColorName}
+                    />
                   ))
                 )}
               </div>
@@ -2504,7 +2999,7 @@ export default function AdminDashboard() {
                   <Card>
                     <CardContent className="text-center py-12">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        ✉️
+                        💬
                       </div>
                       <p className="text-gray-500 text-lg">
                         {language === "ar" ? "لا توجد رسائل بعد" : "No messages yet"}
@@ -2515,22 +3010,26 @@ export default function AdminDashboard() {
                   messages.map((message) => (
                     <Card key={message.id}>
                       <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h3 className="text-xl font-semibold mb-2">{message.subject}</h3>
-                            <p className="text-gray-600 mb-2">
-                              {language === "ar" ? "من:" : "From:"} {message.name} ({message.email})
-                            </p>
-                            <p className="text-gray-700 mb-4">{message.message}</p>
-                            <p className="text-sm text-gray-500">
-                              {language === "ar" ? "تاريخ الرسالة:" : "Message Date:"}{" "}
-                              {new Date(message.created_at).toLocaleDateString()}
-                            </p>
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h3 className="text-xl font-semibold">{message.subject}</h3>
+                              <p className="text-sm text-gray-500">
+                                {language === "ar" ? "من:" : "From:"} {message.name} ({message.email})
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {language === "ar" ? "التاريخ:" : "Date:"}{" "}
+                                {new Date(message.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Button variant="destructive" size="sm" onClick={() => handleDeleteMessage(message.id)}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {language === "ar" ? "حذف" : "Delete"}
+                            </Button>
                           </div>
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteMessage(message.id)}>
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            {language === "ar" ? "حذف" : "Delete"}
-                          </Button>
+                          <div className="bg-muted p-4 rounded-lg">
+                            <p className="whitespace-pre-wrap">{message.message}</p>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -2542,226 +3041,175 @@ export default function AdminDashboard() {
         </Tabs>
       </div>
 
-      {/* Image Management Dialog */}
-      <Dialog open={isManagingImages} onOpenChange={setIsManagingImages}>
-        <DialogContent className="max-w-3xl">
+      {/* Order Details Dialog */}
+      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {language === "ar"
-                ? `إدارة صور المنتج: ${selectedProduct?.[`title_${language}`]}`
-                : `Manage Images for: ${selectedProduct?.[`title_${language}`]}`}
+              {language === "ar" ? "تفاصيل الطلب" : "Order Details"} #{selectedOrder?.order_number || selectedOrder?.id}
             </DialogTitle>
           </DialogHeader>
-
-          {selectedProduct && (
-            <div className="space-y-4">
-              {/* Upload new images */}
-              <div>
-                <label htmlFor="manage-images-upload" className="cursor-pointer">
-                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 hover:border-muted-foreground/50 transition-colors">
-                    <div className="text-center">
-                      <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {language === "ar" ? "انقر لإضافة صور جديدة" : "Click to add new images"}
+          {selectedOrder && (
+            <div className="space-y-6">
+              {/* Customer Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-semibold mb-2">
+                    {language === "ar" ? "معلومات العميل" : "Customer Information"}
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      <strong>{language === "ar" ? "الاسم:" : "Name:"}</strong> {selectedOrder.full_name}
+                    </p>
+                    <p>
+                      <strong>{language === "ar" ? "الهاتف:" : "Phone:"}</strong> {selectedOrder.phone}
+                    </p>
+                    <p>
+                      <strong>{language === "ar" ? "العنوان:" : "Address:"}</strong> {selectedOrder.state},{" "}
+                      {selectedOrder.city}
+                    </p>
+                    {selectedOrder.notes && (
+                      <p>
+                        <strong>{language === "ar" ? "ملاحظات:" : "Notes:"}</strong> {selectedOrder.notes}
                       </p>
-                    </div>
+                    )}
                   </div>
-                  <input
-                    id="manage-images-upload"
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      // Handle adding new images to existing product
-                      if (e.target.files && e.target.files.length > 0) {
-                        const files = Array.from(e.target.files)
-                        files.forEach(async (file) => {
-                          try {
-                            const base64 = await convertFileToBase64(file)
-                            const currentImages = productImages[selectedProduct.id] || []
-                            const maxSortOrder =
-                              currentImages.length > 0 ? Math.max(...currentImages.map((img) => img.sort_order)) : -1
-
-                            const { error } = await supabase.from("product_images").insert([
-                              {
-                                product_id: selectedProduct.id,
-                                image_url: base64,
-                                is_main: currentImages.length === 0,
-                                sort_order: maxSortOrder + 1,
-                              },
-                            ])
-
-                            if (error) throw error
-                            await fetchProductImages(selectedProduct.id)
-                          } catch (error) {
-                            console.error("Error adding image:", error)
-                            toast({
-                              title: language === "ar" ? "خطأ في إضافة الصورة" : "Error adding image",
-                              description: error.message,
-                              variant: "destructive",
-                            })
-                          }
-                        })
-                      }
-                    }}
-                    disabled={uploadingImage}
-                  />
-                </label>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">{language === "ar" ? "معلومات الطلب" : "Order Information"}</h3>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      <strong>{language === "ar" ? "رقم الطلب:" : "Order Number:"}</strong>{" "}
+                      {selectedOrder.order_number || `#${selectedOrder.id}`}
+                    </p>
+                    <p>
+                      <strong>{language === "ar" ? "تاريخ الطلب:" : "Order Date:"}</strong>{" "}
+                      {new Date(selectedOrder.created_at).toLocaleDateString()}
+                    </p>
+                    <p>
+                      <strong>{language === "ar" ? "نوع التوصيل:" : "Delivery Type:"}</strong>{" "}
+                      {selectedOrder.delivery_type === "home"
+                        ? language === "ar"
+                          ? "توصيل منزلي"
+                          : "Home Delivery"
+                        : language === "ar"
+                          ? "استلام من المكتب"
+                          : "Office Pickup"}
+                    </p>
+                    <p>
+                      <strong>{language === "ar" ? "رسوم التوصيل:" : "Delivery Fee:"}</strong> DA{" "}
+                      {selectedOrder.delivery_fee.toLocaleString()}
+                    </p>
+                    <p>
+                      <strong>{language === "ar" ? "الحالة:" : "Status:"}</strong>{" "}
+                      {getOrderStatusBadge(selectedOrder.status)}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {/* Existing images */}
-              {productImages[selectedProduct.id] && productImages[selectedProduct.id].length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {productImages[selectedProduct.id].map((image) => (
-                    <div
-                      key={image.id}
-                      className={`relative group border-2 rounded-lg overflow-hidden ${
-                        image.is_main ? "border-primary" : "border-border"
-                      }`}
-                    >
-                      <img
-                        src={image.image_url || "/placeholder.svg"}
-                        alt={selectedProduct[`title_${language}`]}
-                        className="w-full aspect-square object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <Button
-                          size="sm"
-                          variant={image.is_main ? "default" : "secondary"}
-                          onClick={() => handleSetMainImage(image.id, selectedProduct.id)}
-                          disabled={image.is_main}
-                        >
-                          <Star className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleDeleteProductImage(image.id, selectedProduct.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {image.is_main && (
-                        <div className="absolute top-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded">
-                          {language === "ar" ? "رئيسية" : "Main"}
+              {/* Order Items */}
+              <div>
+                <h3 className="font-semibold mb-4">{language === "ar" ? "المنتجات المطلوبة" : "Order Items"}</h3>
+                <div className="space-y-3">
+                  {orderItems[selectedOrder.id]?.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center p-4 bg-muted rounded-lg">
+                      <div>
+                        <p className="font-medium">{item.product_title}</p>
+                        <div className="text-sm text-muted-foreground">
+                          {item.color && (
+                            <span>
+                              {language === "ar" ? "اللون:" : "Color:"} {getColorName(item.color) || item.color}
+                            </span>
+                          )}
+                          {item.color && item.size && " • "}
+                          {item.size && (
+                            <span>
+                              {language === "ar" ? "المقاس:" : "Size:"} {item.size}
+                            </span>
+                          )}
                         </div>
-                      )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">
+                          {item.quantity} × DA {item.product_price.toLocaleString()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          DA {(item.quantity * item.product_price).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
+
+              {/* Order Summary */}
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center text-lg font-semibold">
+                  <span>{language === "ar" ? "المبلغ الإجمالي:" : "Total Amount:"}</span>
+                  <span>DA {selectedOrder.total_amount.toLocaleString()}</span>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Order Details Dialog */}
-      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="max-w-2xl">
+      {/* Image Management Dialog */}
+      <Dialog open={isManagingImages} onOpenChange={setIsManagingImages}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {language === "ar" ? "تفاصيل الطلب" : "Order Details"}:{" "}
-              {selectedOrder?.order_number || `#${selectedOrder?.id}`}
+              {language === "ar" ? "إدارة صور المنتج" : "Manage Product Images"} -{" "}
+              {selectedProduct?.[`title_${language}`]}
             </DialogTitle>
           </DialogHeader>
-
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "الاسم الكامل" : "Full Name"}</p>
-                  <p className="font-medium">{selectedOrder.full_name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "رقم الهاتف" : "Phone Number"}</p>
-                  <p className="font-medium">{selectedOrder.phone}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "الولاية" : "State"}</p>
-                  <p className="font-medium">{selectedOrder.state}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "المدينة" : "City"}</p>
-                  <p className="font-medium">{selectedOrder.city}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "نوع التوصيل" : "Delivery Type"}</p>
-                  <p className="font-medium">
-                    {selectedOrder.delivery_type === "home"
-                      ? language === "ar"
-                        ? "توصيل للمنزل"
-                        : "Home Delivery"
-                      : language === "ar"
-                        ? "استلام من المكتب"
-                        : "Office Pickup"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "رسوم التوصيل" : "Delivery Fee"}</p>
-                  <p className="font-medium">DA {selectedOrder.delivery_fee.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    {language === "ar" ? "المبلغ الإجمالي" : "Total Amount"}
-                  </p>
-                  <p className="font-medium text-lg">DA {selectedOrder.total_amount.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "حالة الطلب" : "Order Status"}</p>
-                  <div className="mt-1">{getOrderStatusBadge(selectedOrder.status)}</div>
-                </div>
-              </div>
-
-              {selectedOrder.notes && (
-                <div>
-                  <p className="text-sm text-muted-foreground">{language === "ar" ? "ملاحظات" : "Notes"}</p>
-                  <p className="font-medium">{selectedOrder.notes}</p>
-                </div>
-              )}
-
-              {/* Order Items */}
-              {orderItems[selectedOrder.id] && orderItems[selectedOrder.id].length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2">{language === "ar" ? "المنتجات المطلوبة" : "Ordered Items"}</h4>
-                  <div className="space-y-2">
-                    {orderItems[selectedOrder.id].map((item) => (
-                      <div key={item.id} className="flex justify-between items-center p-2 bg-muted rounded">
-                        <div>
-                          <p className="font-medium">{item.product_title}</p>
-                          <div className="text-sm text-muted-foreground">
-                            {item.color && (
-                              <span>
-                                {language === "ar" ? "اللون:" : "Color:"} {getColorName(item.color) || item.color}
-                              </span>
-                            )}
-                            {item.color && item.size && " • "}
-                            {item.size && (
-                              <span>
-                                {language === "ar" ? "المقاس:" : "Size:"} {item.size}
-                              </span>
-                            )}
+          {selectedProduct && (
+            <div className="space-y-6">
+              {/* Current Images */}
+              <div>
+                <h3 className="font-semibold mb-4">{language === "ar" ? "الصور الحالية" : "Current Images"}</h3>
+                {productImages[selectedProduct.id] && productImages[selectedProduct.id].length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {productImages[selectedProduct.id].map((image) => (
+                      <div key={image.id} className="relative group">
+                        <img
+                          src={image.image_url || "/placeholder.svg"}
+                          alt={selectedProduct[`title_${language}`]}
+                          className="w-full aspect-square object-cover rounded-md border"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md flex items-center justify-center gap-2">
+                          {!image.is_main && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleSetMainImage(image.id, selectedProduct.id)}
+                              className="bg-yellow-500 hover:bg-yellow-600"
+                            >
+                              <Star className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeleteProductImage(image.id, selectedProduct.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        {image.is_main && (
+                          <div className="absolute top-2 left-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded">
+                            {language === "ar" ? "رئيسية" : "Main"}
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium">
-                            {item.quantity} × DA {item.product_price.toLocaleString()}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            DA {(item.quantity * item.product_price).toLocaleString()}
-                          </p>
-                        </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              <div className="pt-4 border-t">
-                <p className="text-sm text-muted-foreground">
-                  {language === "ar" ? "تاريخ الطلب:" : "Order Date:"}{" "}
-                  {new Date(selectedOrder.created_at).toLocaleString()}
-                </p>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">
+                    {language === "ar" ? "لا توجد صور لهذا المنتج" : "No images for this product"}
+                  </p>
+                )}
               </div>
             </div>
           )}

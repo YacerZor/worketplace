@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Truck, Minus, Plus, ChevronLeft, ChevronRight, Search, X, ZoomIn, AlertCircle } from "lucide-react"
+import { Truck, Minus, Plus, ChevronLeft, ChevronRight, Search, ZoomIn, AlertCircle } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
@@ -490,16 +490,10 @@ export default function ProductPage() {
                       <img
                         src={productImages[currentImageIndex]?.image_url || product.image}
                         alt={product[`title_${language}`]}
-                        className={`w-full h-full object-cover transition-transform duration-200 ${
-                          isZoomed ? "scale-150" : ""
-                        }`}
-                        style={
-                          isZoomed
-                            ? {
-                                transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
-                              }
-                            : {}
-                        }
+                        className={`w-full h-full object-cover ${isZoomed ? "scale-150" : ""}`}
+                        style={{
+                          transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                        }}
                       />
                       <div className="absolute top-2 right-2 bg-white/80 rounded-full p-2">
                         <ZoomIn className="h-5 w-5 text-gray-700" />
@@ -561,7 +555,7 @@ export default function ProductPage() {
                 {/* Fullscreen Image Dialog */}
                 <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full">
+                    <Button variant="outline" className="w-full bg-transparent">
                       <Search className="h-4 w-4 mr-2" />
                       {language === "ar" ? "عرض بالحجم الكامل" : "View Fullscreen"}
                     </Button>
@@ -597,7 +591,7 @@ export default function ProductPage() {
                         className="absolute top-4 right-4 bg-white/20 rounded-full p-2 hover:bg-white/40 transition-colors"
                         onClick={() => setIsFullscreenOpen(false)}
                       >
-                       {/* <X className="h-6 w-6 text-white" />*/}
+                        {/* <X className="h-6 w-6 text-white" />*/}
                       </button>
                     </div>
                   </DialogContent>
@@ -863,7 +857,7 @@ export default function ProductPage() {
                       size="icon"
                       onClick={decrementQuantity}
                       disabled={quantity <= 1}
-                      className="h-10 w-10 rounded-full"
+                      className="h-10 w-10 rounded-full bg-transparent"
                     >
                       <Minus className="h-4 w-4" />
                     </Button>
@@ -873,7 +867,7 @@ export default function ProductPage() {
                       variant="outline"
                       size="icon"
                       onClick={incrementQuantity}
-                      className="h-10 w-10 rounded-full"
+                      className="h-10 w-10 rounded-full bg-transparent"
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
