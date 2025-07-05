@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import Link from "next/link"
+import type { JSX } from "react"
 
 interface Product {
   id: number
@@ -1506,7 +1507,7 @@ export default function AdminDashboard() {
 
   const handleAddEditSize = useCallback(() => {
     if (editSize.name_ar && editSize.value) {
-      const sizeToAdd = {
+      const colorToAdd = {
         ...editSize,
         name_en: editSize.name_en || editSize.name_ar,
       }
@@ -1694,6 +1695,68 @@ export default function AdminDashboard() {
       }
     },
     [language],
+  )
+
+  const handleAddProductImages = useCallback(
+    async (files: FileList | null, productId: number | undefined) => {
+      if (!files || files.length === 0 || !productId) return
+
+      setUploadingImage(true)
+
+      try {
+        const newImages: string[] = []
+
+        // Process images in parallel for faster upload
+        const imagePromises = Array.from(files)
+          .slice(0, 5)
+          .map(async (file) => {
+            if (file.type.startsWith("image/")) {
+              return await convertFileToBase64(file)
+            }
+            return null
+          })
+
+        const results = await Promise.all(imagePromises)
+        const validImages = results.filter((img) => img !== null) as string[]
+        newImages.push(...validImages)
+
+        if (newImages.length === 0) return
+
+        // Prepare images for database insert
+        const imagesToInsert = newImages.map((url, index) => ({
+          product_id: productId,
+          image_url: url,
+          is_main: false,
+          sort_order: (productImages[productId]?.length || 0) + index,
+        }))
+
+        // Insert images to database
+        const { data: insertedImages, error } = await supabase.from("product_images").insert(imagesToInsert).select()
+
+        if (error) throw error
+
+        // Update local state
+        setProductImages((prev) => ({
+          ...prev,
+          [productId]: [...(prev[productId] || []), ...insertedImages],
+        }))
+
+        toast({
+          title: language === "ar" ? "تم رفع الصور" : "Images uploaded",
+          description: language === "ar" ? "تم رفع الصور بنجاح" : "Images uploaded successfully",
+        })
+      } catch (error) {
+        console.error("Error uploading images:", error)
+        toast({
+          title: language === "ar" ? "خطأ في رفع الصور" : "Error uploading images",
+          description: language === "ar" ? "حدث خطأ أثناء رفع الصور" : "An error occurred while uploading images",
+          variant: "destructive",
+        })
+      } finally {
+        setUploadingImage(false)
+      }
+    },
+    [convertFileToBase64, language, productImages],
   )
 
   // Utility functions
@@ -3210,6 +3273,50 @@ export default function AdminDashboard() {
                     {language === "ar" ? "لا توجد صور لهذا المنتج" : "No images for this product"}
                   </p>
                 )}
+              </div>
+
+              {/* Add New Images Section */}
+              <div>
+                <h3 className="font-semibold mb-4">{language === "ar" ? "إضافة صور جديدة" : "Add New Images"}</h3>
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 hover:border-muted-foreground/50 transition-colors">
+                  <div className="text-center">
+                    <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <div className="mt-4">
+                      <label htmlFor="add-product-images" className="cursor-pointer">
+                        <span className="mt-2 block text-sm font-medium text-muted-foreground">
+                          {language === "ar"
+                            ? "اسحب الصور هنا أو انقر للاختيار"
+                            : "Drag images here or click to select"}
+                        </span>
+                        <input
+                          id="add-product-images"
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleAddProductImages(e.target.files, selectedProduct?.id)}
+                          disabled={uploadingImage}
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2 bg-transparent"
+                        onClick={() => document.getElementById("add-product-images")?.click()}
+                        disabled={uploadingImage}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploadingImage
+                          ? language === "ar"
+                            ? "جاري الرفع..."
+                            : "Uploading..."
+                          : language === "ar"
+                            ? "اختر الصور"
+                            : "Choose Images"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
