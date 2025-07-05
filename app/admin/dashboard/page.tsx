@@ -29,6 +29,10 @@ import {
   Menu,
   Palette,
   Ruler,
+  TrendingUp,
+  Package,
+  ShoppingCart,
+  DollarSign,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import Link from "next/link"
@@ -527,6 +531,21 @@ export default function AdminDashboard() {
       return matchesSearch && matchesStatus
     })
   }, [orders, orderSearch, orderStatusFilter])
+
+  // Statistics calculations
+  const statistics = useMemo(() => {
+    const completedOrders = orders.filter((order) => order.status === "delivered")
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + order.total_amount, 0)
+    const totalProducts = products.length
+    const totalOrders = orders.length
+
+    return {
+      completedOrders: completedOrders.length,
+      totalRevenue,
+      totalProducts,
+      totalOrders,
+    }
+  }, [orders, products])
 
   // Initialize data
   useEffect(() => {
@@ -1888,6 +1907,75 @@ export default function AdminDashboard() {
 
       {/* Main content */}
       <div className="container mx-auto px-4 py-8">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {language === "ar" ? "إجمالي المنتجات" : "Total Products"}
+                  </p>
+                  <p className="text-2xl font-bold">{statistics.totalProducts}</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Package className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {language === "ar" ? "إجمالي الطلبات" : "Total Orders"}
+                  </p>
+                  <p className="text-2xl font-bold">{statistics.totalOrders}</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-orange-100 flex items-center justify-center">
+                  <ShoppingCart className="h-6 w-6 text-orange-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {language === "ar" ? "الطلبات المكتملة" : "Completed Orders"}
+                  </p>
+                  <p className="text-2xl font-bold">{statistics.completedOrders}</p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-green-100 flex items-center justify-center">
+                  <TrendingUp className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {language === "ar" ? "إجمالي الأرباح" : "Total Revenue"}
+                  </p>
+                  <p className="text-2xl font-bold">DA {statistics.totalRevenue.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {language === "ar" ? "من الطلبات المكتملة" : "From completed orders"}
+                  </p>
+                </div>
+                <div className="h-12 w-12 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <DollarSign className="h-6 w-6 text-emerald-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-8">
             <TabsTrigger value="products">{language === "ar" ? "المنتجات" : "Products"}</TabsTrigger>
