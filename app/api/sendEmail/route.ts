@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
 import { supabase } from "@/lib/supabase"
 
-const resend = new Resend("re_XTkcXdCE_BWhQ7HKjCFABXUgMTtBVtwJk")
+const resend = new Resend(process.env.RESEND_API_KEY || "re_XTkcXdCE_BWhQ7HKjCFABXUgMTtBVtwJk")
 
 // دالة للحصول على اسم اللون من hex code
 async function getColorName(colorValue: string | null): Promise<string | null> {
@@ -51,6 +51,8 @@ interface OrderData {
 export async function POST(request: NextRequest) {
   try {
     const orderData: OrderData = await request.json()
+
+    console.log("Received order data:", orderData)
 
     const {
       orderNumber,
@@ -366,22 +368,46 @@ export async function POST(request: NextRequest) {
     </html>
     `
 
+    console.log("Attempting to send email...")
+
     // Send email using Resend
     const { data, error } = await resend.emails.send({
       from: "onboarding@resend.dev",
-      to: ["Worketplace1313@gmail.com"],
+      to: ["worketplace1313@gmail.com"],
       subject: `🛍️ طلب جديد #${orderNumber} - ${fullName}`,
       html: htmlContent,
     })
 
     if (error) {
-      console.error("Error sending email:", error)
-      return NextResponse.json({ error: "Failed to send email", details: error }, { status: 500 })
+      console.error("Resend API error:", error)
+      return NextResponse.json(
+        {
+          error: "Failed to send email",
+          details: error,
+          message: "Email service error",
+        },
+        { status: 500 },
+      )
     }
 
-    return NextResponse.json({ success: true, message: "Email sent successfully", data }, { status: 200 })
+    console.log("Email sent successfully:", data)
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Email sent successfully",
+        data,
+      },
+      { status: 200 },
+    )
   } catch (error) {
     console.error("Error in sendEmail API:", error)
-    return NextResponse.json({ error: "Internal server error", details: error }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      { status: 500 },
+    )
   }
 }
