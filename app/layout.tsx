@@ -1,4 +1,4 @@
-import { SpeedInsights } from "@vercel/speed-insights/next";
+
 import type { Metadata } from "next"
 import { IBM_Plex_Sans_Arabic } from "next/font/google"
 import { GeistSans } from "geist/font"
