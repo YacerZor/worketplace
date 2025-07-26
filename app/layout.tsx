@@ -1,5 +1,4 @@
 import type { Metadata } from "next"
-
 import { IBM_Plex_Sans_Arabic } from "next/font/google"
 import { GeistSans } from "geist/font"
 import "./globals.css"
@@ -35,7 +34,6 @@ export default function RootLayout({
           <LanguageProvider>
             <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 dark:from-background dark:to-muted/10">
               {children}
-        <SpeedInsights />
             </div>
             <Toaster />
           </LanguageProvider>
