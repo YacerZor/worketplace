@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
 import { supabase } from "@/lib/supabase"
 
-const resend = new Resend(process.env.RESEND_API_KEY || "re_XTkcXdCE_BWhQ7HKjCFABXUgMTtBVtwJk")
+const resend = new Resend(process.env.RESEND_API_KEY || "re_Ah3v3Joh_JqvLEpVs17BVYjUEjn8KWYSJ")
 
 // دالة للحصول على اسم اللون من hex code
 async function getColorName(colorValue: string | null): Promise<string | null> {
