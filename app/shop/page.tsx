@@ -60,7 +60,7 @@ export default function ShopPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [activeCategory, setActiveCategory] = useState<number | null>(null)
   const [minPrice, setMinPrice] = useState<number>(0)
-  const [maxPrice, setMaxPrice] = useState<number>(10000)
+  const [maxPrice, setMaxPrice] = useState<number>(10000000)
   const [sortBy, setSortBy] = useState<string>("newest")
   const [inStockOnly, setInStockOnly] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
@@ -145,7 +145,7 @@ export default function ShopPage() {
   const resetFilters = () => {
     setActiveCategory(null)
     setMinPrice(0)
-    setMaxPrice(10000)
+    setMaxPrice(10000000)
     setInStockOnly(false)
     setSortBy("newest")
     setSearchQuery("")
