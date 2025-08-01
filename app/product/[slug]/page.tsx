@@ -282,7 +282,6 @@ export default function ProductPage() {
 
       // Send email notification
       try {
-        console.log("Preparing email data...")
         const emailData = {
           orderNumber,
           fullName,
@@ -296,14 +295,13 @@ export default function ProductPage() {
           product: {
             title: product[`title_${language}`],
             price: product.price,
-            image: productImages[0]?.image_url || product.image,
+            image: product.image,
           },
           quantity,
           selectedColor,
           selectedSize,
         }
 
-        console.log("Sending email notification...")
         const emailResponse = await fetch("/api/sendEmail", {
           method: "POST",
           headers: {
@@ -312,17 +310,11 @@ export default function ProductPage() {
           body: JSON.stringify(emailData),
         })
 
-        const emailResult = await emailResponse.json()
-
         if (!emailResponse.ok) {
-          console.error("Email API error:", emailResult)
-          // Don't fail the order if email fails, just log it
-        } else {
-          console.log("Email sent successfully:", emailResult)
+          console.error("Failed to send email notification")
         }
       } catch (emailError) {
         console.error("Error sending email notification:", emailError)
-        // Don't fail the order if email fails, just log it
       }
 
       // Send notification to admin

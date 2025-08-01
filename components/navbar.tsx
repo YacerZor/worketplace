@@ -109,7 +109,7 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+        "fixed top-0 left-0 right-0 z-40 transition-all duration-300",
         isScrolled ? "bg-background/95 backdrop-blur-sm shadow-md" : "bg-transparent",
       )}
     >
@@ -164,7 +164,7 @@ export function Navbar() {
 
                 {/* Search Results Dropdown */}
                 {showResults && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-50 max-h-[400px] overflow-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-45 max-h-[400px] overflow-auto">
                     <div className="p-2">
                       <h3 className="text-sm font-medium px-2 py-1 text-muted-foreground">
                         {language === "ar" ? "نتائج البحث" : "Search Results"}
@@ -200,7 +200,7 @@ export function Navbar() {
 
                 {/* No Results */}
                 {showResults && searchResults.length === 0 && searchQuery.trim().length > 1 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-50">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-45">
                     <div className="p-4 text-center text-muted-foreground">
                       {language === "ar" ? "لا توجد نتائج" : "No results found"}
                     </div>
