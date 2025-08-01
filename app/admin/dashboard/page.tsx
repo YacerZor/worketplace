@@ -3,40 +3,40 @@
 import { useState, useEffect, useCallback, useMemo, memo } from "react"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/components/language-provider"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { supabase } from "@/lib/supabase"
 import {
+  Loader2,
   Plus,
+  Save,
+  X,
   Edit,
   Trash2,
-  Package,
-  ShoppingCart,
-  TrendingUp,
   Eye,
-  X,
-  Upload,
   ImageIcon,
-  DollarSign,
-  Loader2,
+  Upload,
+  Star,
   ArrowLeft,
   Menu,
-  Star,
-  Save,
   Palette,
   Ruler,
+  TrendingUp,
+  Package,
+  ShoppingCart,
+  DollarSign,
 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 import type { JSX } from "react"
-import { Checkbox } from "@/components/ui/checkbox"
 
 interface Product {
   id: number
@@ -56,12 +56,13 @@ interface Product {
   created_at: string
 }
 
-interface ProductImage {
+interface Category {
   id: number
-  product_id: number
-  image_url: string
-  is_main: boolean
-  sort_order: number
+  name_ar: string
+  name_en: string
+  slug: string
+  image: string
+  created_at: string
 }
 
 interface ProductVariant {
@@ -74,15 +75,12 @@ interface ProductVariant {
   in_stock: boolean
 }
 
-interface Category {
+interface ProductImage {
   id: number
-  name_ar: string
-  name_en: string
-  description_ar: string
-  description_en: string
-  image: string
-  slug: string
-  created_at: string
+  product_id: number
+  image_url: string
+  is_main: boolean
+  sort_order: number
 }
 
 interface Order {
@@ -98,13 +96,12 @@ interface Order {
   total_amount: number
   status: string
   created_at: string
-  order_items: OrderItem[]
 }
 
 interface OrderItem {
   id: number
   order_id: number
-  product_id: number
+  product_id: number | null
   product_title: string
   product_price: number
   quantity: number
@@ -135,13 +132,6 @@ interface DefaultSize {
   name_en: string
   value: string
   created_at: string
-}
-
-interface Stats {
-  totalProducts: number
-  totalOrders: number
-  completedOrders: number
-  totalRevenue: number
 }
 
 // Memoized components for better performance
@@ -460,7 +450,7 @@ export default function AdminDashboard() {
   const [uploadingImage, setUploadingImage] = useState(false)
 
   // UI states
-  const [activeTab, setActiveTab] = useState("stats")
+  const [activeTab, setActiveTab] = useState("products")
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -1988,7 +1978,6 @@ export default function AdminDashboard() {
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-8">
-            <TabsTrigger value="stats">{language === "ar" ? "الإحصائيات" : "Statistics"}</TabsTrigger>
             <TabsTrigger value="products">{language === "ar" ? "المنتجات" : "Products"}</TabsTrigger>
             <TabsTrigger value="categories">{language === "ar" ? "الأقسام" : "Categories"}</TabsTrigger>
             <TabsTrigger value="variants">{language === "ar" ? "الألوان والمقاسات" : "Colors & Sizes"}</TabsTrigger>
