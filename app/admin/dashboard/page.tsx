@@ -3,40 +3,40 @@
 import { useState, useEffect, useCallback, useMemo, memo } from "react"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/components/language-provider"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
+import { supabase } from "@/lib/supabase"
 import {
-  Loader2,
   Plus,
-  Save,
-  X,
   Edit,
   Trash2,
-  Eye,
-  ImageIcon,
-  Upload,
-  Star,
-  ArrowLeft,
-  Menu,
-  Palette,
-  Ruler,
-  TrendingUp,
   Package,
   ShoppingCart,
+  TrendingUp,
+  Eye,
+  X,
+  Upload,
+  ImageIcon,
   DollarSign,
+  Loader2,
+  ArrowLeft,
+  Menu,
+  Star,
+  Save,
+  Palette,
+  Ruler,
 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 import type { JSX } from "react"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface Product {
   id: number
@@ -45,6 +45,7 @@ interface Product {
   description_ar: string
   description_en: string
   price: number
+  cost_price: number
   old_price: number | null
   image: string
   status_ar: string
@@ -56,13 +57,12 @@ interface Product {
   created_at: string
 }
 
-interface Category {
+interface ProductImage {
   id: number
-  name_ar: string
-  name_en: string
-  slug: string
-  image: string
-  created_at: string
+  product_id: number
+  image_url: string
+  is_main: boolean
+  sort_order: number
 }
 
 interface ProductVariant {
@@ -75,12 +75,15 @@ interface ProductVariant {
   in_stock: boolean
 }
 
-interface ProductImage {
+interface Category {
   id: number
-  product_id: number
-  image_url: string
-  is_main: boolean
-  sort_order: number
+  name_ar: string
+  name_en: string
+  description_ar: string
+  description_en: string
+  image: string
+  slug: string
+  created_at: string
 }
 
 interface Order {
@@ -96,12 +99,13 @@ interface Order {
   total_amount: number
   status: string
   created_at: string
+  order_items: OrderItem[]
 }
 
 interface OrderItem {
   id: number
   order_id: number
-  product_id: number | null
+  product_id: number
   product_title: string
   product_price: number
   quantity: number
@@ -132,6 +136,13 @@ interface DefaultSize {
   name_en: string
   value: string
   created_at: string
+}
+
+interface Stats {
+  totalProducts: number
+  totalOrders: number
+  completedOrders: number
+  totalRevenue: number
 }
 
 // Memoized components for better performance
@@ -180,6 +191,9 @@ const ProductCard = memo(
                 {product.old_price && (
                   <span className="text-gray-500 line-through">DA {product.old_price.toLocaleString()}</span>
                 )}
+              </div>
+              <div className="text-sm text-gray-500">
+                {language === "ar" ? "سعر التكلفة:" : "Cost Price:"} DA {product.cost_price.toLocaleString()}
               </div>
               <div className="flex items-center gap-2">
                 {product.in_stock ? (
@@ -450,7 +464,7 @@ export default function AdminDashboard() {
   const [uploadingImage, setUploadingImage] = useState(false)
 
   // UI states
-  const [activeTab, setActiveTab] = useState("products")
+  const [activeTab, setActiveTab] = useState("stats")
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -465,6 +479,7 @@ export default function AdminDashboard() {
     description_ar: "",
     description_en: "",
     price: 0,
+    cost_price: 0,
     old_price: null as number | null,
     status_ar: "متاح",
     status_en: "Available",
@@ -532,20 +547,38 @@ export default function AdminDashboard() {
     })
   }, [orders, orderSearch, orderStatusFilter])
 
-  // Statistics calculations
+  // Statistics calculations with proper profit calculation
   const statistics = useMemo(() => {
     const completedOrders = orders.filter((order) => order.status === "delivered")
     const totalRevenue = completedOrders.reduce((sum, order) => sum + order.total_amount, 0)
+
+    // Calculate actual profit
+    let totalProfit = 0
+    completedOrders.forEach((order) => {
+      const items = orderItems[order.id] || []
+      items.forEach((item) => {
+        const product = products.find((p) => p.id === item.product_id)
+        if (product) {
+          // Profit = (Selling Price - Cost Price) * Quantity - Delivery Fee per item
+          const itemProfit = (item.product_price - product.cost_price) * item.quantity
+          totalProfit += itemProfit
+        }
+      })
+      // Subtract delivery fee from total profit for this order
+      totalProfit -= order.delivery_fee
+    })
+
     const totalProducts = products.length
     const totalOrders = orders.length
 
     return {
       completedOrders: completedOrders.length,
       totalRevenue,
+      totalProfit,
       totalProducts,
       totalOrders,
     }
-  }, [orders, products])
+  }, [orders, products, orderItems])
 
   // Initialize data
   useEffect(() => {
@@ -1085,6 +1118,7 @@ export default function AdminDashboard() {
         slug,
         image: mainImage,
         price: Number(newProduct.price),
+        cost_price: Number(newProduct.cost_price),
         old_price: newProduct.old_price ? Number(newProduct.old_price) : null,
         rating: Number(newProduct.rating),
       }
@@ -1180,6 +1214,7 @@ export default function AdminDashboard() {
         description_ar: "",
         description_en: "",
         price: 0,
+        cost_price: 0,
         old_price: null,
         status_ar: "متاح",
         status_en: "Available",
@@ -1231,6 +1266,7 @@ export default function AdminDashboard() {
         title_en: editingProduct.title_en || editingProduct.title_ar,
         description_en: editingProduct.description_en || editingProduct.description_ar,
         price: Number(editingProduct.price),
+        cost_price: Number(editingProduct.cost_price),
         old_price: editingProduct.old_price ? Number(editingProduct.old_price) : null,
         rating: Number(editingProduct.rating),
       }
@@ -1962,9 +1998,9 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    {language === "ar" ? "إجمالي الأرباح" : "Total Revenue"}
+                    {language === "ar" ? "إجمالي الأرباح" : "Total Profit"}
                   </p>
-                  <p className="text-2xl font-bold">DA {statistics.totalRevenue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold">DA {statistics.totalProfit.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {language === "ar" ? "من الطلبات المكتملة" : "From completed orders"}
                   </p>
@@ -1978,12 +2014,71 @@ export default function AdminDashboard() {
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-8">
+            <TabsTrigger value="stats">{language === "ar" ? "الإحصائيات" : "Statistics"}</TabsTrigger>
             <TabsTrigger value="products">{language === "ar" ? "المنتجات" : "Products"}</TabsTrigger>
             <TabsTrigger value="categories">{language === "ar" ? "الأقسام" : "Categories"}</TabsTrigger>
             <TabsTrigger value="variants">{language === "ar" ? "الألوان والمقاسات" : "Colors & Sizes"}</TabsTrigger>
             <TabsTrigger value="orders">{language === "ar" ? "الطلبات" : "Orders"}</TabsTrigger>
             <TabsTrigger value="messages">{language === "ar" ? "الرسائل" : "Messages"}</TabsTrigger>
           </TabsList>
+
+          {/* Statistics Tab */}
+          <TabsContent value="stats">
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-semibold">{language === "ar" ? "الإحصائيات" : "Statistics"}</h2>
+              </div>
+
+              {/* Detailed Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      {language === "ar" ? "إجمالي الإيرادات" : "Total Revenue"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold text-blue-600">DA {statistics.totalRevenue.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {language === "ar" ? "من جميع الطلبات المكتملة" : "From all completed orders"}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">{language === "ar" ? "صافي الأرباح" : "Net Profit"}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold text-green-600">DA {statistics.totalProfit.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {language === "ar" ? "بعد خصم التكاليف والشحن" : "After deducting costs and shipping"}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      {language === "ar" ? "معدل إكمال الطلبات" : "Order Completion Rate"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-3xl font-bold text-purple-600">
+                      {statistics.totalOrders > 0
+                        ? Math.round((statistics.completedOrders / statistics.totalOrders) * 100)
+                        : 0}
+                      %
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {statistics.completedOrders} {language === "ar" ? "من" : "of"} {statistics.totalOrders}{" "}
+                      {language === "ar" ? "طلبات" : "orders"}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
 
           {/* Products Tab */}
           <TabsContent value="products">
@@ -2051,10 +2146,26 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Pricing */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-2">
-                        {language === "ar" ? "السعر *" : "Price *"}
+                        {language === "ar" ? "سعر التكلفة *" : "Cost Price *"}
+                      </label>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={newProduct.cost_price}
+                        onChange={(e) =>
+                          setNewProduct({ ...newProduct, cost_price: Number.parseFloat(e.target.value) || 0 })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {language === "ar" ? "السعر الأصلي بدون ربح" : "Original price without profit"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        {language === "ar" ? "سعر البيع *" : "Selling Price *"}
                       </label>
                       <Input
                         type="number"
@@ -2064,6 +2175,9 @@ export default function AdminDashboard() {
                           setNewProduct({ ...newProduct, price: Number.parseFloat(e.target.value) || 0 })
                         }
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {language === "ar" ? "السعر الذي يراه الزبون" : "Price shown to customers"}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">
@@ -2417,7 +2531,7 @@ export default function AdminDashboard() {
                         <Card>
                           <CardContent className="p-6">
                             <div className="space-y-6">
-                              {/* Edit Form - Removed image upload section */}
+                              {/* Edit Form */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                   <label className="block text-sm font-medium mb-2">
@@ -2461,7 +2575,22 @@ export default function AdminDashboard() {
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium mb-2">
-                                    {language === "ar" ? "السعر" : "Price"}
+                                    {language === "ar" ? "سعر التكلفة" : "Cost Price"}
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    value={editingProduct.cost_price}
+                                    onChange={(e) =>
+                                      setEditingProduct({
+                                        ...editingProduct,
+                                        cost_price: Number.parseFloat(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2">
+                                    {language === "ar" ? "سعر البيع" : "Selling Price"}
                                   </label>
                                   <Input
                                     type="number"
