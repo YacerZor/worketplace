@@ -559,13 +559,13 @@ export default function AdminDashboard() {
       items.forEach((item) => {
         const product = products.find((p) => p.id === item.product_id)
         if (product) {
-          // Profit = (Selling Price - Cost Price) * Quantity - Delivery Fee per item
+          // Profit = (Selling Price - Cost Price) * Quantity - 
           const itemProfit = (item.product_price - product.cost_price) * item.quantity
           totalProfit += itemProfit
         }
       })
       // Subtract delivery fee from total profit for this order
-      totalProfit -= order.delivery_fee
+      
     })
 
     const totalProducts = products.length
