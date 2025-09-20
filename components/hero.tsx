@@ -67,7 +67,7 @@ export function Hero() {
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 to-primary/10 rounded-3xl blur-3xl"></div>
                 <img
-                  src="https://i.imgur.com/RO1JnpQ.png"
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RO1JnpQ%281%29-HWW8FSc0BaW3shCa4SUHChICz2mzwe.png"
                   alt={language === "ar" ? "صورة الموديل" : "Model Image"}
                   className="relative w-full max-w-md mx-auto transform hover:scale-105 transition-transform duration-300 hover:drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]"
                 />

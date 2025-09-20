@@ -39,7 +39,7 @@ export function Footer() {
           <div className="md:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <img
-                src="https://i.imgur.com/ufgqHwx.jpeg"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/ufgqHwx%281%29-7gpQV3Sal0AXKMVDDWbNA0McmTao5I.jpeg"
                 alt="WORKET PLACE Logo"
                 className="w-10 h-10"
               />

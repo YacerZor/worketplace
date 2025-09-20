@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
+import { RecentSearches } from "@/components/recent-searches"
 
 interface SearchResult {
   id: number
@@ -31,6 +32,7 @@ export function Navbar() {
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [showResults, setShowResults] = useState(false)
+  const [showRecentSearches, setShowRecentSearches] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
   const navigation = [
@@ -54,6 +56,7 @@ export function Navbar() {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowResults(false)
+        setShowRecentSearches(false)
       }
     }
 
@@ -65,14 +68,16 @@ export function Navbar() {
     const delaySearch = setTimeout(() => {
       if (searchQuery.trim().length > 1) {
         performSearch()
+        setShowRecentSearches(false)
       } else {
         setSearchResults([])
         setShowResults(false)
+        setShowRecentSearches(searchQuery.trim().length === 0 && isSearchOpen)
       }
     }, 300)
 
     return () => clearTimeout(delaySearch)
-  }, [searchQuery])
+  }, [searchQuery, isSearchOpen])
 
   const performSearch = async () => {
     try {
@@ -93,23 +98,38 @@ export function Navbar() {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
+      if (window.addRecentSearch) {
+        window.addRecentSearch(searchQuery.trim())
+      }
       router.push(`/shop?search=${encodeURIComponent(searchQuery)}`)
       setIsSearchOpen(false)
       setShowResults(false)
+      setShowRecentSearches(false)
     }
   }
 
   const handleSearchItemClick = (slug: string) => {
+    if (window.addRecentSearch) {
+      window.addRecentSearch(searchQuery.trim())
+    }
     router.push(`/product/${slug}`)
     setSearchQuery("")
     setShowResults(false)
     setIsSearchOpen(false)
+    setShowRecentSearches(false)
+  }
+
+  const handleRecentSearchSelect = (query: string) => {
+    setSearchQuery(query)
+    router.push(`/shop?search=${encodeURIComponent(query)}`)
+    setIsSearchOpen(false)
+    setShowRecentSearches(false)
   }
 
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-40 transition-all duration-300",
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
         isScrolled ? "bg-background/95 backdrop-blur-sm shadow-md" : "bg-transparent",
       )}
     >
@@ -118,7 +138,7 @@ export function Navbar() {
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
               <img
-                src="https://i.imgur.com/ufgqHwx.jpeg"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/ufgqHwx%281%29-7gpQV3Sal0AXKMVDDWbNA0McmTao5I.jpeg"
                 alt="Worket Place Logo"
                 className="w-12 h-12 object-contain"
               />
@@ -149,6 +169,7 @@ export function Navbar() {
                       className="w-64 pr-8 border-primary/20 focus:border-primary"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => setShowRecentSearches(searchQuery.trim().length === 0)}
                       autoFocus
                     />
                     <X
@@ -157,14 +178,22 @@ export function Navbar() {
                         setIsSearchOpen(false)
                         setSearchQuery("")
                         setShowResults(false)
+                        setShowRecentSearches(false)
                       }}
                     />
                   </div>
                 </form>
 
+                {/* Recent Searches */}
+                {showRecentSearches && (
+                  <div className="absolute top-full left-0 right-0 z-50">
+                    <RecentSearches onSearchSelect={handleRecentSearchSelect} currentQuery={searchQuery} />
+                  </div>
+                )}
+
                 {/* Search Results Dropdown */}
                 {showResults && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-45 max-h-[400px] overflow-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-50 max-h-[400px] overflow-auto">
                     <div className="p-2">
                       <h3 className="text-sm font-medium px-2 py-1 text-muted-foreground">
                         {language === "ar" ? "نتائج البحث" : "Search Results"}
@@ -200,7 +229,7 @@ export function Navbar() {
 
                 {/* No Results */}
                 {showResults && searchResults.length === 0 && searchQuery.trim().length > 1 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-45">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-50">
                     <div className="p-4 text-center text-muted-foreground">
                       {language === "ar" ? "لا توجد نتائج" : "No results found"}
                     </div>
@@ -252,6 +281,18 @@ export function Navbar() {
                 <Search className="h-4 w-4 text-muted-foreground" />
               </button>
             </form>
+
+            {/* Mobile Recent Searches */}
+            {showRecentSearches && (
+              <div className="bg-muted rounded-md p-2 mb-4">
+                <h3 className="text-sm font-medium px-2 py-1 text-muted-foreground">
+                  {language === "ar" ? "البحث الأخير" : "Recent Searches"}
+                </h3>
+                <div className="space-y-2">
+                  <RecentSearches onSearchSelect={handleRecentSearchSelect} currentQuery={searchQuery} />
+                </div>
+              </div>
+            )}
 
             {/* Mobile Search Results */}
             {showResults && searchResults.length > 0 && (

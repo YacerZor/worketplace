@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { useLanguage } from "@/components/language-provider"
 import { Navbar } from "@/components/navbar"
@@ -8,7 +8,7 @@ import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Eye, Filter, Search } from "lucide-react"
+import { Eye, Filter, Search, Plus, User, Star, Sparkles } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -25,6 +25,8 @@ import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { UsedProductSubmissionForm } from "@/components/used-product-submission-form"
+import { RecentSearches } from "@/components/recent-searches"
 
 interface Product {
   id: number
@@ -41,6 +43,9 @@ interface Product {
   category_id: number | null
   rating: number
   slug: string
+  is_used?: boolean
+  phone?: string
+  created_at?: string // Added for sorting
 }
 
 interface Category {
@@ -60,12 +65,17 @@ export default function ShopPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [activeCategory, setActiveCategory] = useState<number | null>(null)
   const [minPrice, setMinPrice] = useState<number>(0)
-  const [maxPrice, setMaxPrice] = useState<number>(10000000)
+  const [maxPrice, setMaxPrice] = useState<number>(100000000)
   const [sortBy, setSortBy] = useState<string>("newest")
   const [inStockOnly, setInStockOnly] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [isSubmissionFormOpen, setIsSubmissionFormOpen] = useState(false)
+  const [showRecentSearches, setShowRecentSearches] = useState(false)
+  const [usedProductsCount, setUsedProductsCount] = useState(0)
+
+  const currentRequestRef = useRef<number>(0)
 
   useEffect(() => {
     fetchCategories()
@@ -88,74 +98,159 @@ export default function ShopPage() {
   async function fetchCategories() {
     try {
       const { data, error } = await supabase.from("categories").select("*")
-      if (error) throw error
+      if (error) {
+        console.error("Supabase error:", error)
+        throw error
+      }
       setCategories(data || [])
     } catch (error) {
       console.error("Error fetching categories:", error)
+      // Don't show error to user, just log it
+      setCategories([])
     }
   }
 
   async function fetchProducts() {
     setIsLoading(true)
+
+    const requestId = ++currentRequestRef.current
+
     try {
-      let query = supabase.from("products").select("*")
+      let allProducts: Product[] = []
 
-      if (activeCategory) {
-        query = query.eq("category_id", activeCategory)
+      // Fetch regular products
+      if (activeCategory !== -1) {
+        let query = supabase.from("products").select("*")
+
+        if (activeCategory && activeCategory !== -1) {
+          query = query.eq("category_id", activeCategory)
+        }
+
+        query = query.gte("price", minPrice).lte("price", maxPrice)
+
+        if (inStockOnly) {
+          query = query.eq("in_stock", true)
+        }
+
+        if (searchQuery) {
+          query = query.or(`title_ar.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`)
+        }
+
+        const { data: regularProducts, error: regularError } = await query
+        if (regularError) throw regularError
+
+        if (requestId !== currentRequestRef.current) {
+          return // Ignore stale response
+        }
+
+        allProducts = [...(regularProducts || []).map((p) => ({ ...p, is_used: false }))]
       }
 
-      query = query.gte("price", minPrice).lte("price", maxPrice)
+      // Fetch used products (only if showing all or used category)
+      if (activeCategory === null || activeCategory === -1) {
+        let usedQuery = supabase.from("used_products").select("*").eq("status", "approved")
 
-      if (inStockOnly) {
-        query = query.eq("in_stock", true)
+        usedQuery = usedQuery.gte("price", minPrice).lte("price", maxPrice)
+
+        if (searchQuery) {
+          usedQuery = usedQuery.or(`title_ar.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`)
+        }
+
+        const { data: usedProducts, error: usedError } = await usedQuery
+        if (usedError) throw usedError
+
+        if (requestId !== currentRequestRef.current) {
+          return // Ignore stale response
+        }
+
+        const approvedUsedProducts = usedProducts || []
+        setUsedProductsCount(approvedUsedProducts.length)
+
+        // Transform used products to match regular product structure
+        const transformedUsedProducts: Product[] = approvedUsedProducts.map((up) => ({
+          id: up.id,
+          title_ar: up.title_ar,
+          title_en: up.title_en || up.title_ar,
+          description_ar: up.description_ar,
+          description_en: up.description_en || up.description_ar,
+          price: up.price,
+          old_price: null,
+          image: up.image,
+          status_ar: "متاح",
+          status_en: "Available",
+          in_stock: true,
+          category_id: null,
+          rating: 4.5,
+          slug: up.slug || `used-${up.id}`,
+          is_used: true,
+          phone: up.phone,
+        }))
+
+        // If showing only used products, replace all products
+        if (activeCategory === -1) {
+          allProducts = transformedUsedProducts
+        } else {
+          // If showing all, add used products to regular products
+          allProducts = [...allProducts, ...transformedUsedProducts]
+        }
       }
 
-      if (searchQuery) {
-        query = query.or(`title_ar.ilike.%${searchQuery}%,title_en.ilike.%${searchQuery}%`)
-      }
-
+      // Apply sorting
       switch (sortBy) {
         case "newest":
-          query = query.order("created_at", { ascending: false })
+          allProducts.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
           break
         case "price-asc":
-          query = query.order("price", { ascending: true })
+          allProducts.sort((a, b) => a.price - b.price)
           break
         case "price-desc":
-          query = query.order("price", { ascending: false })
+          allProducts.sort((a, b) => b.price - a.price)
           break
         case "name-asc":
-          query = query.order(language === "ar" ? "title_ar" : "title_en", { ascending: true })
+          allProducts.sort((a, b) => a[`title_${language}`].localeCompare(b[`title_${language}`]))
           break
         case "name-desc":
-          query = query.order(language === "ar" ? "title_ar" : "title_en", { ascending: false })
+          allProducts.sort((a, b) => b[`title_${language}`].localeCompare(a[`title_${language}`]))
           break
       }
 
-      const { data, error } = await query
-      if (error) throw error
-      setProducts(data || [])
+      if (requestId === currentRequestRef.current) {
+        setProducts(allProducts)
+      }
     } catch (error) {
       console.error("Error fetching products:", error)
+      if (requestId === currentRequestRef.current) {
+        setProducts([])
+      }
     } finally {
-      setIsLoading(false)
+      if (requestId === currentRequestRef.current) {
+        setIsLoading(false)
+      }
     }
   }
 
   const resetFilters = () => {
     setActiveCategory(null)
     setMinPrice(0)
-    setMaxPrice(10000000)
+    setMaxPrice(100000000)
     setInStockOnly(false)
     setSortBy("newest")
     setSearchQuery("")
   }
 
   const getCategoryName = (categoryId: number | null) => {
+    if (categoryId === -1) return language === "ar" ? "المستعمل" : "Used"
     if (!categoryId) return language === "ar" ? "جميع المنتجات" : "All Products"
     const category = categories.find((cat) => cat.id === categoryId)
     return category ? category[`name_${language}`] : ""
   }
+
+  const handleRecentSearchSelect = (query: string) => {
+    setSearchQuery(query)
+    setShowRecentSearches(false)
+  }
+
+  const isUsedSection = activeCategory === -1
 
   return (
     <>
@@ -177,8 +272,17 @@ export default function ShopPage() {
                   className="pr-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setShowRecentSearches(searchQuery.trim().length === 0)}
+                  onBlur={() => setTimeout(() => setShowRecentSearches(false), 200)}
                 />
                 <Search className="absolute right-3 top-2.5 h-5 w-5 text-muted-foreground" />
+
+                {/* Recent Searches for main search */}
+                {showRecentSearches && (
+                  <div className="absolute top-full left-0 right-0 z-50">
+                    <RecentSearches onSearchSelect={handleRecentSearchSelect} currentQuery={searchQuery} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -213,6 +317,33 @@ export default function ShopPage() {
                   {category[`name_${language}`]}
                 </Button>
               ))}
+              <Button
+                variant={activeCategory === -1 ? "default" : "outline"}
+                className={`rounded-full px-6 py-6 transition-all duration-300 relative overflow-hidden group ${
+                  activeCategory === -1
+                    ? "bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:via-orange-700 hover:to-orange-800 text-white shadow-xl border-0"
+                    : "hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100 hover:border-orange-300 hover:text-orange-700 border-2 border-orange-200 text-orange-600"
+                }`}
+                onClick={() => setActiveCategory(-1)}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-400/20 via-orange-500/20 to-orange-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <Sparkles
+                  className={`h-4 w-4 mr-2 ${activeCategory === -1 ? "animate-pulse" : "group-hover:animate-bounce"}`}
+                />
+                <User className="h-4 w-4 mr-1" />
+                <span className="font-semibold">{language === "ar" ? "المستعمل" : "Used"}</span>
+                {activeCategory === -1 && (
+                  <Badge variant="secondary" className="ml-2 bg-white/20 text-white border-white/30 backdrop-blur-sm">
+                    <Star className="h-3 w-3 mr-1" />
+                    {usedProductsCount}
+                  </Badge>
+                )}
+                {activeCategory !== -1 && usedProductsCount > 0 && (
+                  <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800 border-orange-200">
+                    {usedProductsCount}
+                  </Badge>
+                )}
+              </Button>
             </div>
           </div>
         </section>
@@ -221,7 +352,7 @@ export default function ShopPage() {
           <div className="container mx-auto px-4">
             <div className="flex flex-col lg:flex-row gap-8">
               <div className="flex-1">
-                <div className="flex flex-wrap items-center justify-between mb-8 gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-semibold">
                       {searchQuery
@@ -229,146 +360,196 @@ export default function ShopPage() {
                           ? `نتائج البحث: "${searchQuery}"`
                           : `Search Results: "${searchQuery}"`
                         : getCategoryName(activeCategory)}
-                      <span className="text-muted-foreground ml-2">({products.length})</span>
+                      <span className="text-muted-foreground ml-2">
+                        ({isUsedSection ? usedProductsCount : products.length})
+                      </span>
                     </h2>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                      <SheetTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Filter className="h-4 w-4 mr-2" />
-                          {language === "ar" ? "فلتر" : "Filter"}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    {isUsedSection && (
+                      <div className="w-full sm:w-auto">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => setIsSubmissionFormOpen(true)}
+                          className="w-full sm:w-auto bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 hover:from-orange-600 hover:via-orange-700 hover:to-orange-800 text-white shadow-xl border-0 rounded-full px-6 py-3 font-semibold transition-all duration-300 hover:scale-105 hover:shadow-2xl"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          <Sparkles className="h-3 w-3 mr-1 animate-pulse" />
+                          {language === "ar" ? "منتج جديد" : "New Product"}
                         </Button>
-                      </SheetTrigger>
-                      <SheetContent side={language === "ar" ? "right" : "left"} className="w-[300px] sm:w-[400px]">
-                        <SheetHeader>
-                          <SheetTitle>{language === "ar" ? "فلتر المنتجات" : "Filter Products"}</SheetTitle>
-                        </SheetHeader>
-                        <div className="py-4 space-y-6">
-                          <Accordion type="single" collapsible defaultValue="categories">
-                            <AccordionItem value="categories">
-                              <AccordionTrigger>{language === "ar" ? "الأقسام" : "Categories"}</AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-2 pt-2">
-                                  <Button
-                                    variant={activeCategory === null ? "default" : "ghost"}
-                                    className={`w-full justify-start ${
-                                      activeCategory === null
-                                        ? "bg-[#d4af37] hover:bg-[#d4af37]/90 text-white"
-                                        : "hover:bg-[#d4af37]/10 hover:text-[#d4af37]"
-                                    }`}
-                                    onClick={() => setActiveCategory(null)}
-                                  >
-                                    {language === "ar" ? "جميع المنتجات" : "All Products"}
-                                  </Button>
-                                  {categories.map((category) => (
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                      <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                        <SheetTrigger asChild>
+                          <Button variant="outline" size="sm" className="flex-1 sm:flex-none bg-transparent">
+                            <Filter className="h-4 w-4 mr-2" />
+                            {language === "ar" ? "فلتر" : "Filter"}
+                          </Button>
+                        </SheetTrigger>
+                        <SheetContent side={language === "ar" ? "right" : "left"} className="w-[300px] sm:w-[400px]">
+                          <SheetHeader>
+                            <SheetTitle>{language === "ar" ? "فلتر المنتجات" : "Filter Products"}</SheetTitle>
+                          </SheetHeader>
+                          <div className="py-4 space-y-6">
+                            <Accordion type="single" collapsible defaultValue="categories">
+                              <AccordionItem value="categories">
+                                <AccordionTrigger>{language === "ar" ? "الأقسام" : "Categories"}</AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="space-y-2 pt-2">
                                     <Button
-                                      key={category.id}
-                                      variant={activeCategory === category.id ? "default" : "ghost"}
+                                      variant={activeCategory === null ? "default" : "ghost"}
                                       className={`w-full justify-start ${
-                                        activeCategory === category.id
+                                        activeCategory === null
                                           ? "bg-[#d4af37] hover:bg-[#d4af37]/90 text-white"
                                           : "hover:bg-[#d4af37]/10 hover:text-[#d4af37]"
                                       }`}
-                                      onClick={() => setActiveCategory(category.id)}
+                                      onClick={() => setActiveCategory(null)}
                                     >
-                                      {category[`name_${language}`]}
+                                      {language === "ar" ? "جميع المنتجات" : "All Products"}
                                     </Button>
-                                  ))}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="price">
-                              <AccordionTrigger>{language === "ar" ? "نطاق السعر" : "Price Range"}</AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-4 pt-2">
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                      <label className="text-sm text-muted-foreground mb-1 block">
-                                        {language === "ar" ? "من" : "Min"}
-                                      </label>
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        value={minPrice}
-                                        onChange={(e) => setMinPrice(Number(e.target.value))}
-                                        className="h-9"
+                                    {categories.map((category) => (
+                                      <Button
+                                        key={category.id}
+                                        variant={activeCategory === category.id ? "default" : "ghost"}
+                                        className={`w-full justify-start ${
+                                          activeCategory === category.id
+                                            ? "bg-[#d4af37] hover:bg-[#d4af37]/90 text-white"
+                                            : "hover:bg-[#d4af37]/10 hover:text-[#d4af37]"
+                                        }`}
+                                        onClick={() => setActiveCategory(category.id)}
+                                      >
+                                        {category[`name_${language}`]}
+                                      </Button>
+                                    ))}
+                                    <Button
+                                      variant={activeCategory === -1 ? "default" : "ghost"}
+                                      className={`w-full justify-start relative overflow-hidden group ${
+                                        activeCategory === -1
+                                          ? "bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg"
+                                          : "hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100 hover:text-orange-700"
+                                      }`}
+                                      onClick={() => setActiveCategory(-1)}
+                                    >
+                                      <div className="absolute inset-0 bg-gradient-to-r from-orange-400/10 to-orange-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                      <Sparkles
+                                        className={`h-4 w-4 mr-2 ${activeCategory === -1 ? "animate-pulse" : "group-hover:animate-bounce"}`}
                                       />
-                                    </div>
-                                    <div>
-                                      <label className="text-sm text-muted-foreground mb-1 block">
-                                        {language === "ar" ? "إلى" : "Max"}
-                                      </label>
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        value={maxPrice}
-                                        onChange={(e) => setMaxPrice(Number(e.target.value))}
-                                        className="h-9"
-                                      />
-                                    </div>
+                                      <User className="h-4 w-4 mr-1" />
+                                      <span className="font-medium">{language === "ar" ? "المستعمل" : "Used"}</span>
+                                      {usedProductsCount > 0 && (
+                                        <Badge
+                                          variant="secondary"
+                                          className={`ml-auto ${
+                                            activeCategory === -1
+                                              ? "bg-white/20 text-white border-white/30"
+                                              : "bg-orange-100 text-orange-800 border-orange-200"
+                                          }`}
+                                        >
+                                          <Star className="h-3 w-3 mr-1" />
+                                          {usedProductsCount}
+                                        </Badge>
+                                      )}
+                                    </Button>
                                   </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full bg-transparent"
-                                    onClick={() => {
-                                      fetchProducts()
-                                    }}
-                                  >
-                                    {language === "ar" ? "تطبيق" : "Apply"}
-                                  </Button>
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="availability">
-                              <AccordionTrigger>{language === "ar" ? "التوفر" : "Availability"}</AccordionTrigger>
-                              <AccordionContent>
-                                <div className="flex items-center space-x-2 rtl:space-x-reverse pt-2">
-                                  <Checkbox
-                                    id="mobile-in-stock"
-                                    checked={inStockOnly}
-                                    onCheckedChange={(checked) => setInStockOnly(checked as boolean)}
-                                  />
-                                  <label
-                                    htmlFor="mobile-in-stock"
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                  >
-                                    {language === "ar" ? "المنتجات المتوفرة فقط" : "In stock only"}
-                                  </label>
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        </div>
-                        <SheetFooter className="flex flex-row gap-3 sm:justify-between">
-                          <Button variant="outline" className="flex-1 bg-transparent" onClick={resetFilters}>
-                            {language === "ar" ? "إعادة تعيين" : "Reset"}
-                          </Button>
-                          <SheetClose asChild>
-                            <Button className="flex-1">{language === "ar" ? "تطبيق الفلاتر" : "Apply Filters"}</Button>
-                          </SheetClose>
-                        </SheetFooter>
-                      </SheetContent>
-                    </Sheet>
+                                </AccordionContent>
+                              </AccordionItem>
+                              <AccordionItem value="price">
+                                <AccordionTrigger>{language === "ar" ? "نطاق السعر" : "Price Range"}</AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="space-y-4 pt-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <label className="text-sm text-muted-foreground mb-1 block">
+                                          {language === "ar" ? "من" : "Min"}
+                                        </label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          value={minPrice}
+                                          onChange={(e) => setMinPrice(Number(e.target.value))}
+                                          className="h-9"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-sm text-muted-foreground mb-1 block">
+                                          {language === "ar" ? "إلى" : "Max"}
+                                        </label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          value={maxPrice}
+                                          onChange={(e) => setMaxPrice(Number(e.target.value))}
+                                          className="h-9"
+                                        />
+                                      </div>
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full bg-transparent"
+                                      onClick={fetchProducts}
+                                    >
+                                      {language === "ar" ? "تطبيق" : "Apply"}
+                                    </Button>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                              {!isUsedSection && (
+                                <AccordionItem value="availability">
+                                  <AccordionTrigger>{language === "ar" ? "التوفر" : "Availability"}</AccordionTrigger>
+                                  <AccordionContent>
+                                    <div className="flex items-center space-x-2 rtl:space-x-reverse pt-2">
+                                      <Checkbox
+                                        id="mobile-in-stock"
+                                        checked={inStockOnly}
+                                        onCheckedChange={(checked) => setInStockOnly(checked as boolean)}
+                                      />
+                                      <label
+                                        htmlFor="mobile-in-stock"
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                      >
+                                        {language === "ar" ? "المنتجات المتوفرة فقط" : "In stock only"}
+                                      </label>
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              )}
+                            </Accordion>
+                          </div>
+                          <SheetFooter className="flex flex-row gap-3 sm:justify-between">
+                            <Button variant="outline" className="flex-1 bg-transparent" onClick={resetFilters}>
+                              {language === "ar" ? "إعادة تعيين" : "Reset"}
+                            </Button>
+                            <SheetClose asChild>
+                              <Button className="flex-1">
+                                {language === "ar" ? "تطبيق الفلاتر" : "Apply Filters"}
+                              </Button>
+                            </SheetClose>
+                          </SheetFooter>
+                        </SheetContent>
+                      </Sheet>
 
-                    <Select value={sortBy} onValueChange={setSortBy}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder={language === "ar" ? "ترتيب حسب" : "Sort by"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="newest">{language === "ar" ? "الأحدث" : "Newest"}</SelectItem>
-                        <SelectItem value="price-asc">
-                          {language === "ar" ? "السعر: من الأقل إلى الأعلى" : "Price: Low to High"}
-                        </SelectItem>
-                        <SelectItem value="price-desc">
-                          {language === "ar" ? "السعر: من الأعلى إلى الأقل" : "Price: High to Low"}
-                        </SelectItem>
-                        <SelectItem value="name-asc">{language === "ar" ? "الاسم: أ-ي" : "Name: A-Z"}</SelectItem>
-                        <SelectItem value="name-desc">{language === "ar" ? "الاسم: ي-أ" : "Name: Z-A"}</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <Select value={sortBy} onValueChange={setSortBy}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                          <SelectValue placeholder={language === "ar" ? "ترتيب حسب" : "Sort by"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="newest">{language === "ar" ? "الأحدث" : "Newest"}</SelectItem>
+                          <SelectItem value="price-asc">
+                            {language === "ar" ? "السعر: من الأقل إلى الأعلى" : "Price: Low to High"}
+                          </SelectItem>
+                          <SelectItem value="price-desc">
+                            {language === "ar" ? "السعر: من الأعلى إلى الأقل" : "Price: High to Low"}
+                          </SelectItem>
+                          <SelectItem value="name-asc">{language === "ar" ? "الاسم: أ-ي" : "Name: A-Z"}</SelectItem>
+                          <SelectItem value="name-desc">{language === "ar" ? "الاسم: ي-أ" : "Name: Z-A"}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
 
@@ -391,7 +572,7 @@ export default function ShopPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                     {products.map((product, index) => (
                       <motion.div
-                        key={product.id}
+                        key={`${product.is_used ? "used" : "regular"}-${product.id}`}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3, delay: index * 0.05 }}
@@ -411,8 +592,17 @@ export default function ShopPage() {
                                 {/* Gradient Overlay */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-                                {/* Sale Badge */}
-                                {product.old_price && (
+                                {/* Used Badge for Used Products */}
+                                {product.is_used && (
+                                  <div className="absolute top-4 left-4 z-10">
+                                    <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 px-4 py-2 text-sm font-bold shadow-xl rounded-full">
+                                      {language === "ar" ? "مستعمل" : "USED"}
+                                    </Badge>
+                                  </div>
+                                )}
+
+                                {/* Sale Badge for Regular Products */}
+                                {!product.is_used && product.old_price && (
                                   <div className="absolute top-4 left-4 z-10">
                                     <Badge className="bg-gradient-to-r from-red-500 to-red-600 text-white border-0 px-4 py-2 text-sm font-bold shadow-xl rounded-full">
                                       {language === "ar" ? "خصم" : "SALE"}
@@ -420,8 +610,8 @@ export default function ShopPage() {
                                   </div>
                                 )}
 
-                                {/* Out of Stock Overlay */}
-                                {!product.in_stock && (
+                                {/* Out of Stock Overlay for Regular Products */}
+                                {!product.is_used && !product.in_stock && (
                                   <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-20">
                                     <div className="bg-white/95 backdrop-blur-sm rounded-2xl px-8 py-4 shadow-xl">
                                       <span className="text-lg font-bold text-gray-900">
@@ -439,7 +629,11 @@ export default function ShopPage() {
                                     className="bg-white/90 backdrop-blur-sm hover:bg-white rounded-full h-12 w-12 shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110"
                                     asChild
                                   >
-                                    <Link href={`/product/${product.slug}`}>
+                                    <Link
+                                      href={
+                                        product.is_used ? `/used-product/${product.slug}` : `/product/${product.slug}`
+                                      }
+                                    >
                                       <Eye className="h-5 w-5 text-gray-700" />
                                     </Link>
                                   </Button>
@@ -451,22 +645,31 @@ export default function ShopPage() {
                             <div className="p-6 flex flex-col flex-grow bg-white dark:bg-gray-900">
                               {/* Status Badge */}
                               <div className="mb-4">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs px-3 py-1 rounded-full font-medium ${
-                                    product.in_stock
-                                      ? "border-green-300 text-green-700 bg-green-50 dark:bg-green-900/20 dark:text-green-400"
-                                      : "border-red-300 text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400"
-                                  }`}
-                                >
-                                  {product.in_stock
-                                    ? language === "ar"
-                                      ? "متاح"
-                                      : "Available"
-                                    : language === "ar"
-                                      ? "غير متاح"
-                                      : "Out of Stock"}
-                                </Badge>
+                                {product.is_used ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-xs px-3 py-1 rounded-full font-medium border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400"
+                                  >
+                                    {language === "ar" ? "مستعمل" : "Used"}
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs px-3 py-1 rounded-full font-medium ${
+                                      product.in_stock
+                                        ? "border-green-300 text-green-700 bg-green-50 dark:bg-green-900/20 dark:text-green-400"
+                                        : "border-red-300 text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400"
+                                    }`}
+                                  >
+                                    {product.in_stock
+                                      ? language === "ar"
+                                        ? "متاح"
+                                        : "Available"
+                                      : language === "ar"
+                                        ? "غير متاح"
+                                        : "Out of Stock"}
+                                  </Badge>
+                                )}
                               </div>
 
                               {/* Product Title */}
@@ -486,13 +689,13 @@ export default function ShopPage() {
                                     <span className="text-2xl font-bold text-primary">
                                       DA {product.price.toLocaleString()}
                                     </span>
-                                    {product.old_price && (
+                                    {!product.is_used && product.old_price && (
                                       <span className="text-lg line-through text-muted-foreground">
                                         DA {product.old_price.toLocaleString()}
                                       </span>
                                     )}
                                   </div>
-                                  {product.old_price && (
+                                  {!product.is_used && product.old_price && (
                                     <span className="text-xs text-green-600 font-medium">
                                       {language === "ar"
                                         ? `وفر ${(product.old_price - product.price).toLocaleString()} دج`
@@ -505,15 +708,21 @@ export default function ShopPage() {
                                   variant="default"
                                   size="sm"
                                   className={`rounded-full px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 ${
-                                    product.in_stock
-                                      ? "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground"
-                                      : "bg-gray-400 hover:bg-gray-500 text-white cursor-not-allowed"
+                                    product.is_used
+                                      ? "bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white"
+                                      : product.in_stock
+                                        ? "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground"
+                                        : "bg-gray-400 hover:bg-gray-500 text-white cursor-not-allowed"
                                   }`}
-                                  disabled={!product.in_stock}
-                                  asChild={product.in_stock}
+                                  disabled={!product.is_used && !product.in_stock}
+                                  asChild={product.is_used || product.in_stock}
                                 >
-                                  {product.in_stock ? (
-                                    <Link href={`/product/${product.slug}`}>
+                                  {product.is_used || product.in_stock ? (
+                                    <Link
+                                      href={
+                                        product.is_used ? `/used-product/${product.slug}` : `/product/${product.slug}`
+                                      }
+                                    >
                                       {language === "ar" ? "شراء الآن" : "Buy Now"}
                                     </Link>
                                   ) : (
@@ -548,6 +757,7 @@ export default function ShopPage() {
         </section>
       </main>
       <Footer />
+      <UsedProductSubmissionForm open={isSubmissionFormOpen} onClose={() => setIsSubmissionFormOpen(false)} />
     </>
   )
 }

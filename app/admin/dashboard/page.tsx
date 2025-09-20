@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useMemo, memo } from "react"
 import { useRouter } from "next/navigation"
 import { useLanguage } from "@/components/language-provider"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -15,7 +15,6 @@ import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { supabase } from "@/lib/supabase"
 import {
-  Plus,
   Edit,
   Trash2,
   Package,
@@ -23,20 +22,22 @@ import {
   TrendingUp,
   Eye,
   X,
-  Upload,
   ImageIcon,
   DollarSign,
   Loader2,
   ArrowLeft,
   Menu,
+  Plus,
   Star,
   Save,
   Palette,
   Ruler,
+  Upload,
 } from "lucide-react"
 import Link from "next/link"
 import type { JSX } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { AdminUsedProducts } from "@/components/admin-used-products"
 
 interface Product {
   id: number
@@ -559,13 +560,13 @@ export default function AdminDashboard() {
       items.forEach((item) => {
         const product = products.find((p) => p.id === item.product_id)
         if (product) {
-          // Profit = (Selling Price - Cost Price) * Quantity - 
+          // Profit = (Selling Price - Cost Price) * Quantity - Delivery Fee per item
           const itemProfit = (item.product_price - product.cost_price) * item.quantity
           totalProfit += itemProfit
         }
       })
       // Subtract delivery fee from total profit for this order
-      
+      totalProfit -= order.delivery_fee
     })
 
     const totalProducts = products.length
@@ -1562,13 +1563,13 @@ export default function AdminDashboard() {
 
   const handleAddEditSize = useCallback(() => {
     if (editSize.name_ar && editSize.value) {
-      const colorToAdd = {
+      const sizeToAdd = {
         ...editSize,
         name_en: editSize.name_en || editSize.name_ar,
       }
       setEditingVariants((prev) => ({
         ...prev,
-        sizes: [...prev.sizes, colorToAdd],
+        sizes: [...prev.sizes, sizeToAdd],
       }))
       setEditSize({ name_ar: "", name_en: "", value: "" })
       setIsEditingSize(false)
@@ -2012,15 +2013,33 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-8">
-            <TabsTrigger value="stats">{language === "ar" ? "الإحصائيات" : "Statistics"}</TabsTrigger>
-            <TabsTrigger value="products">{language === "ar" ? "المنتجات" : "Products"}</TabsTrigger>
-            <TabsTrigger value="categories">{language === "ar" ? "الأقسام" : "Categories"}</TabsTrigger>
-            <TabsTrigger value="variants">{language === "ar" ? "الألوان والمقاسات" : "Colors & Sizes"}</TabsTrigger>
-            <TabsTrigger value="orders">{language === "ar" ? "الطلبات" : "Orders"}</TabsTrigger>
-            <TabsTrigger value="messages">{language === "ar" ? "الرسائل" : "Messages"}</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <TabsList className="mb-8 w-full min-w-max">
+              <TabsTrigger value="stats" className="whitespace-nowrap">
+                {language === "ar" ? "الإحصائيات" : "Statistics"}
+              </TabsTrigger>
+              <TabsTrigger value="products" className="whitespace-nowrap">
+                {language === "ar" ? "المنتجات" : "Products"}
+              </TabsTrigger>
+              <TabsTrigger value="categories" className="whitespace-nowrap">
+                {language === "ar" ? "الأقسام" : "Categories"}
+              </TabsTrigger>
+              <TabsTrigger value="variants" className="whitespace-nowrap">
+                {language === "ar" ? "الألوان والمقاسات" : "Colors & Sizes"}
+              </TabsTrigger>
+              <TabsTrigger value="orders" className="whitespace-nowrap">
+                {language === "ar" ? "الطلبات" : "Orders"}
+              </TabsTrigger>
+              <TabsTrigger value="messages" className="whitespace-nowrap">
+                {language === "ar" ? "الرسائل" : "Messages"}
+              </TabsTrigger>
+              <TabsTrigger value="used-products" className="whitespace-nowrap">
+                {language === "ar" ? "المنتجات المستعملة" : "Used Products"}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Statistics Tab */}
           <TabsContent value="stats">
@@ -2080,7 +2099,11 @@ export default function AdminDashboard() {
             </div>
           </TabsContent>
 
-          {/* Products Tab */}
+          {/* Used Products Tab */}
+          <TabsContent value="used-products">
+            <AdminUsedProducts />
+          </TabsContent>
+            {/* Products Tab */}
           <TabsContent value="products">
             <div className="space-y-6">
               <div className="flex justify-between items-center">
@@ -3318,9 +3341,10 @@ export default function AdminDashboard() {
               </div>
             </div>
           </TabsContent>
+          {/* Other tabs would continue here... */}
         </Tabs>
       </div>
-
+      
       {/* Order Details Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
