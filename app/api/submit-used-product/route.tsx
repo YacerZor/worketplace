@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY || "re_XTkcXdCE_BWhQ7HKjCFABXUgMTtBVtwJk")
+const resend = new Resend(process.env.RESEND_API_KEY || "re_Ah3v3Joh_JqvLEpVs17BVYjUEjn8KWYSJ")
 
 export async function POST(request: NextRequest) {
   try {
