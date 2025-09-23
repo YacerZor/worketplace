@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase"
-import { Eye, Loader2, Phone, Calendar, User, Trash2, Edit, RotateCcw } from "lucide-react"
+import { Eye, Loader2, Phone, Calendar, User, Trash2, Edit, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 
 interface UsedProduct {
   id: number
@@ -18,6 +18,7 @@ interface UsedProduct {
   description_ar: string
   description_en: string
   image: string
+  images?: string[]
   price: number
   phone: string
   user_id: string | null
@@ -35,6 +36,7 @@ export function AdminUsedProducts() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editPrice, setEditPrice] = useState<string>("")
   const [isUpdating, setIsUpdating] = useState(false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   useEffect(() => {
     fetchUsedProducts()
@@ -62,6 +64,7 @@ export function AdminUsedProducts() {
   const handleOpenDialog = (product: UsedProduct) => {
     setSelectedProduct(product)
     setEditPrice(product.price.toString())
+    setCurrentImageIndex(0)
     setIsDialogOpen(true)
   }
 
@@ -85,6 +88,7 @@ export function AdminUsedProducts() {
 
       if (error) throw error
 
+      
       setUsedProducts((prev) =>
         prev.map((product) =>
           product.id === productId
@@ -101,7 +105,9 @@ export function AdminUsedProducts() {
       toast({
         title: language === "ar" ? "تمت الموافقة على المنتج" : "Product Approved",
         description:
-          language === "ar" ? "تمت الموافقة على المنتج المستعمل بنجاح" : "Used product approved successfully",
+          language === "ar"
+            ? "تمت الموافقة على المنتج المستعمل بنجاح وتم إرسال إشعار للبائع"
+            : "Used product approved successfully and seller has been notified",
       })
       handleCloseDialog()
     } catch (error) {
@@ -123,13 +129,17 @@ export function AdminUsedProducts() {
 
       if (error) throw error
 
+     
       setUsedProducts((prev) =>
         prev.map((product) => (product.id === productId ? { ...product, status: "rejected" } : product)),
       )
 
       toast({
         title: language === "ar" ? "تم رفض المنتج" : "Product Rejected",
-        description: language === "ar" ? "تم رفض المنتج المستعمل بنجاح" : "Used product rejected successfully",
+        description:
+          language === "ar"
+            ? "تم رفض المنتج المستعمل بنجاح وتم إرسال إشعار للبائع"
+            : "Used product rejected successfully and seller has been notified",
       })
       handleCloseDialog()
     } catch (error) {
@@ -280,6 +290,27 @@ export function AdminUsedProducts() {
     })
   }
 
+  const getProductImages = (product: UsedProduct): string[] => {
+    if (product.images && product.images.length > 0) {
+      return product.images
+    }
+    return product.image ? [product.image] : []
+  }
+
+  const nextImage = () => {
+    if (selectedProduct) {
+      const images = getProductImages(selectedProduct)
+      setCurrentImageIndex((prev) => (prev + 1) % images.length)
+    }
+  }
+
+  const prevImage = () => {
+    if (selectedProduct) {
+      const images = getProductImages(selectedProduct)
+      setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -311,100 +342,158 @@ export function AdminUsedProducts() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {usedProducts.map((product) => (
-            <Card key={product.id} className="overflow-hidden">
-              <CardContent className="p-0">
-                {/* Product Image */}
-                <div className="relative aspect-[4/3] overflow-hidden">
-                  <img
-                    src={product.image || "/placeholder.svg"}
-                    alt={product[`title_${language}`] || product.title_ar || product.title_en}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-2 right-2">{getStatusBadge(product.status)}</div>
-                  <div className="absolute top-2 left-2">
-                    <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 px-3 py-1 text-xs font-bold shadow-xl rounded-full">
-                      {language === "ar" ? "مستعمل" : "USED"}
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Product Info */}
-                <div className="p-4 space-y-3">
-                  <h3 className="text-lg font-semibold line-clamp-2">
-                    {product[`title_${language}`] || product.title_ar || product.title_en || "No Title"}
-                  </h3>
-
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {product[`description_${language}`] ||
-                      product.description_ar ||
-                      product.description_en ||
-                      "No Description"}
-                  </p>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-xl font-bold text-primary">DA {product.price.toLocaleString()}</span>
-                  </div>
-
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      <span>{product.phone}</span>
+          {usedProducts.map((product) => {
+            const productImages = getProductImages(product)
+            return (
+              <Card key={product.id} className="overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    <img
+                      src={productImages[0] || "/placeholder.svg"}
+                      alt={product[`title_${language}`] || product.title_ar || product.title_en}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 right-2">{getStatusBadge(product.status)}</div>
+                    <div className="absolute top-2 left-2">
+                      <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 px-3 py-1 text-xs font-bold shadow-xl rounded-full">
+                        {language === "ar" ? "مستعمل" : "USED"}
+                      </Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>{formatDate(product.created_at)}</span>
-                    </div>
-                    {product.approved_at && (
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        <span>
-                          {language === "ar" ? "تمت الموافقة:" : "Approved:"} {formatDate(product.approved_at)}
-                        </span>
+                    {productImages.length > 1 && (
+                      <div className="absolute bottom-2 right-2">
+                        <Badge className="bg-black/70 text-white border-0 px-2 py-1 text-xs">
+                          📷 {productImages.length}
+                        </Badge>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleOpenDialog(product)} className="flex-1">
-                      <Eye className="w-4 h-4 mr-2" />
-                      {language === "ar" ? "عرض" : "View"}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDeleteProduct(product.id)}
-                      disabled={isUpdating}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                  <div className="p-4 space-y-3">
+                    <h3 className="text-lg font-semibold line-clamp-2">
+                      {product[`title_${language}`] || product.title_ar || product.title_en || "No Title"}
+                    </h3>
+
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {product[`description_${language}`] ||
+                        product.description_ar ||
+                        product.description_en ||
+                        "No Description"}
+                    </p>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl font-bold text-primary">DA {product.price.toLocaleString()}</span>
+                    </div>
+
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        <span>{product.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>{formatDate(product.created_at)}</span>
+                      </div>
+                      {product.approved_at && (
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4" />
+                          <span>
+                            {language === "ar" ? "تمت الموافقة:" : "Approved:"} {formatDate(product.approved_at)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenDialog(product)} className="flex-1">
+                        <Eye className="w-4 h-4 mr-2" />
+                        {language === "ar" ? "عرض" : "View"}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteProduct(product.id)}
+                        disabled={isUpdating}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
-      {/* Product Details Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{language === "ar" ? "تفاصيل المنتج المستعمل" : "Used Product Details"}</DialogTitle>
           </DialogHeader>
           {selectedProduct && (
             <div className="space-y-6">
-              {/* Product Image */}
-              <div className="aspect-video rounded-lg overflow-hidden">
-                <img
-                  src={selectedProduct.image || "/placeholder.svg"}
-                  alt={selectedProduct[`title_${language}`] || selectedProduct.title_ar || selectedProduct.title_en}
-                  className="w-full h-full object-cover"
-                />
+              <div className="space-y-4">
+                {(() => {
+                  const images = getProductImages(selectedProduct)
+                  return (
+                    <>
+                      <div className="relative aspect-video rounded-lg overflow-hidden">
+                        <img
+                          src={images[currentImageIndex] || "/placeholder.svg"}
+                          alt={`${selectedProduct[`title_${language}`] || selectedProduct.title_ar || selectedProduct.title_en} - Image ${currentImageIndex + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {images.length > 1 && (
+                          <>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                              onClick={prevImage}
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white border-0"
+                              onClick={nextImage}
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                            <div className="absolute bottom-2 right-2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+                              {currentImageIndex + 1} / {images.length}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {images.length > 1 && (
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {images.map((img, index) => (
+                            <button
+                              key={index}
+                              onClick={() => setCurrentImageIndex(index)}
+                              className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                                index === currentImageIndex
+                                  ? "border-primary shadow-lg"
+                                  : "border-gray-200 hover:border-gray-300"
+                              }`}
+                            >
+                              <img
+                                src={img || "/placeholder.svg"}
+                                alt={`Thumbnail ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
 
-              {/* Product Details */}
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-semibold mb-2">
                     {selectedProduct[`title_${language}`] ||
@@ -454,6 +543,7 @@ export function AdminUsedProducts() {
                       <span>{selectedProduct.phone}</span>
                     </div>
                   </div>
+
 
                   <div>
                     <label className="block text-sm font-medium mb-1">
