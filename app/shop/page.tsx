@@ -122,7 +122,7 @@ export default function ShopPage() {
       if (activeCategory !== -1) {
         let query = supabase.from("products").select("*")
 
-        if (activeCategory && activeCategory !== -1) {
+        if (activeCategory) {
           query = query.eq("category_id", activeCategory)
         }
 
@@ -146,8 +146,7 @@ export default function ShopPage() {
         allProducts = [...(regularProducts || []).map((p) => ({ ...p, is_used: false }))]
       }
 
-      // Fetch used products (only if showing all or used category)
-      if (activeCategory === null || activeCategory === -1) {
+     if (activeCategory === -1) {
         let usedQuery = supabase.from("used_products").select("*").eq("status", "approved")
 
         usedQuery = usedQuery.gte("price", minPrice).lte("price", maxPrice)
@@ -184,15 +183,12 @@ export default function ShopPage() {
           slug: up.slug || `used-${up.id}`,
           is_used: true,
           phone: up.phone,
+          created_at: up.created_at || "",
         }))
 
-        // If showing only used products, replace all products
-        if (activeCategory === -1) {
+       
           allProducts = transformedUsedProducts
-        } else {
-          // If showing all, add used products to regular products
-          allProducts = [...allProducts, ...transformedUsedProducts]
-        }
+       
       }
 
       // Apply sorting
@@ -213,6 +209,18 @@ export default function ShopPage() {
           allProducts.sort((a, b) => b[`title_${language}`].localeCompare(a[`title_${language}`]))
           break
       }
+
+      allProducts.sort((a, b) => {
+        // Used products are always considered "in stock"
+        const aInStock = a.is_used || a.in_stock
+        const bInStock = b.is_used || b.in_stock
+
+        // If both have same stock status, maintain current order
+        if (aInStock === bInStock) return 0
+
+        // In-stock products come first
+        return aInStock ? -1 : 1
+      })
 
       if (requestId === currentRequestRef.current) {
         setProducts(allProducts)

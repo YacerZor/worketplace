@@ -42,6 +42,7 @@ export function Products() {
       const { data, error } = await supabase
         .from("products")
         .select("*")
+        .eq("in_stock", true)
         .order("created_at", { ascending: false })
         .limit(5)
 

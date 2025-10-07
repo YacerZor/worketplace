@@ -38,6 +38,7 @@ import Link from "next/link"
 import type { JSX } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { AdminUsedProducts } from "@/components/admin-used-products"
+import { AdminHeroAds } from "@/components/admin-hero-ads"
 
 interface Product {
   id: number
@@ -1320,6 +1321,13 @@ export default function AdminDashboard() {
             in_stock: variant.in_stock,
           })),
         }))
+        } else {
+        // If no variants are provided, ensure the entry is cleared or handled appropriately
+        setProductVariants((prev) => {
+          const newState = { ...prev }
+          delete newState[editingProduct.id]
+          return newState
+        })
       }
 
       toast({
@@ -2037,6 +2045,9 @@ export default function AdminDashboard() {
               </TabsTrigger>
               <TabsTrigger value="used-products" className="whitespace-nowrap">
                 {language === "ar" ? "المنتجات المستعملة" : "Used Products"}
+              </TabsTrigger>
+              <TabsTrigger value="hero-ads" className="whitespace-nowrap">
+                {language === "ar" ? "إعلانات الرئيسية" : "Hero Ads"}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -3340,6 +3351,9 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
+          </TabsContent>
+          <TabsContent value="hero-ads">
+            <AdminHeroAds />
           </TabsContent>
           {/* Other tabs would continue here... */}
         </Tabs>
